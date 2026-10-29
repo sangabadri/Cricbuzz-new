@@ -1,0 +1,13 @@
+from sqlalchemy import String
+from sqlalchemy.orm import Mapped, mapped_column
+from app.models.base import Base
+
+
+class Team(Base):
+    """
+    SQLAlchemy Database Model for the 'teams' table.
+    """
+    __tablename__ = "teams"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
