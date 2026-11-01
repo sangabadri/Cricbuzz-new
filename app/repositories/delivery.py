@@ -1,7 +1,7 @@
-from sqlalchemy import func, select
+from typing import Any
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.delivery import Delivery
-from app.schemas.delivery import DeliveryCreate
 
 
 class DeliveryRepository:
@@ -12,40 +12,31 @@ class DeliveryRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_next_delivery_index(self, innings_id: int) -> int:
-        """Determines the next sequential delivery index for an innings."""
-        query = select(func.coalesce(func.max(Delivery.delivery_index), 0)).where(
-            Delivery.innings_id == innings_id
-        )
-        result = await self.session.execute(query)
-        return int(result.scalar_one()) + 1
-
     async def create(
         self,
         innings_id: int,
-        delivery_in: DeliveryCreate,
-        delivery_index: int | None = None,
+        delivery_data: dict[str, Any] | Any,
     ) -> Delivery:
         """Inserts a new delivery into the database."""
-        if delivery_index is None:
-            delivery_index = await self.get_next_delivery_index(innings_id)
-
+        get = (
+            delivery_data.get
+            if isinstance(delivery_data, dict)
+            else lambda k, default=None: getattr(delivery_data, k, default)
+        )
         delivery = Delivery(
             innings_id=innings_id,
-            delivery_index=delivery_index,
-            over=delivery_in.over,
-            ball=delivery_in.ball,
-            bowler_id=delivery_in.bowler_id,
-            batsman_id=delivery_in.batsman_id,
-            non_striker_id=delivery_in.non_striker_id,
-            runs=delivery_in.runs,
-            extra_type=delivery_in.extra_type,
-            extras=delivery_in.extras,
-            wicket_type=delivery_in.wicket_type,
-            player_out_id=delivery_in.player_out_id,
-            fielder_id=delivery_in.fielder_id,
-            new_batter_id=getattr(delivery_in, "new_batter_id", None),
-            commentary=delivery_in.commentary,
+            over=get("over"),
+            ball=get("ball"),
+            bowler_id=get("bowler_id"),
+            batsman_id=get("batsman_id"),
+            non_striker_id=get("non_striker_id"),
+            runs=get("runs", 0),
+            extra_type=get("extra_type"),
+            extras=get("extras", 0),
+            wicket_type=get("wicket_type"),
+            player_out_id=get("player_out_id"),
+            fielder_id=get("fielder_id"),
+            commentary=get("commentary"),
         )
         self.session.add(delivery)
         await self.session.flush()
@@ -57,7 +48,7 @@ class DeliveryRepository:
         query = (
             select(Delivery)
             .where(Delivery.innings_id == innings_id)
-            .order_by(Delivery.delivery_index.asc(), Delivery.id.asc())
+            .order_by(Delivery.over.asc(), Delivery.ball.asc(), Delivery.id.asc())
         )
         result = await self.session.execute(query)
         return list(result.scalars().all())
@@ -67,7 +58,7 @@ class DeliveryRepository:
         query = (
             select(Delivery)
             .where(Delivery.innings_id == innings_id)
-            .order_by(Delivery.delivery_index.desc(), Delivery.id.desc())
+            .order_by(Delivery.over.desc(), Delivery.ball.desc(), Delivery.id.desc())
             .limit(1)
         )
         result = await self.session.execute(query)

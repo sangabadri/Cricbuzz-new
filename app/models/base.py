@@ -1,9 +1,3 @@
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import declarative_base
 
-
-class Base(DeclarativeBase):
-    """
-    SQLAlchemy 2.0 DeclarativeBase.
-    All ORM database models will inherit from this base class.
-    """
-    pass
+Base = declarative_base()

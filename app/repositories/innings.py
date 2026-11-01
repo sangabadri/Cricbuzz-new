@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.innings import Innings
-from app.schemas.enums import InningsStatus
+from app.domain.enums import InningsStatus
 from app.schemas.innings import InningsCreate
 
 
@@ -27,6 +27,12 @@ class InningsRepository:
         await self.session.flush()
         await self.session.refresh(innings)
         return innings
+
+    async def get_by_id(self, innings_id: int) -> Innings | None:
+        """Finds an innings by primary key ID."""
+        query = select(Innings).where(Innings.id == innings_id)
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
 
     async def get_by_match_and_number(self, match_id: int, innings_number: int) -> Innings | None:
         """Finds an innings by match ID and innings number (1 or 2)."""

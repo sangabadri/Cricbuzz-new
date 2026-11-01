@@ -1,21 +1,12 @@
-from sqlalchemy import Enum, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Column, Integer, String, Enum
 from app.models.base import Base
-from app.schemas.enums import BattingStyle, BowlingStyle, Role
-
+from app.domain.enums import Role, BattingStyle, BowlingStyle
 
 class Player(Base):
-    """
-    SQLAlchemy Model for the 'players' table.
-    """
     __tablename__ = "players"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(100), nullable=False)
-    role: Mapped[Role] = mapped_column(Enum(Role), nullable=False)
-    batting: Mapped[BattingStyle] = mapped_column(Enum(BattingStyle), nullable=False)
-    bowling: Mapped[BowlingStyle | None] = mapped_column(
-        Enum(BowlingStyle),
-        nullable=True,
-        default=None,
-    )
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    role = Column(Enum(Role), nullable=False)
+    batting = Column(Enum(BattingStyle), nullable=False)
+    bowling = Column(Enum(BowlingStyle), nullable=True)

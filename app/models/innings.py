@@ -1,50 +1,35 @@
-from sqlalchemy import CheckConstraint, Enum, ForeignKey, Integer, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.domain.enums import InningsStatus
+from sqlalchemy import Column, Integer, ForeignKey, Enum, CheckConstraint, UniqueConstraint
 from app.models.base import Base
+from app.domain.enums import InningsStatus
 
 
 class Innings(Base):
-    """
-    SQLAlchemy Model for the 'innings' table.
-    Tracks an individual innings of a match.
-    """
     __tablename__ = "innings"
+    
+    id = Column(Integer, primary_key=True)
+    match_id = Column(Integer, ForeignKey("matches.id"), nullable=False)
+    innings_number = Column(Integer, nullable=False)
+    batting_team_id = Column(Integer, ForeignKey("teams.id"), nullable=False)
+    bowling_team_id = Column(Integer, ForeignKey("teams.id"), nullable=False)
+    status = Column(Enum(InningsStatus), nullable=False, default=InningsStatus.NOT_STARTED)
+    target = Column(Integer, nullable=True)
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    match_id: Mapped[int] = mapped_column(ForeignKey("matches.id"), nullable=False)
-    innings_number: Mapped[int] = mapped_column(Integer, nullable=False)
-    batting_team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"), nullable=False)
-    bowling_team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"), nullable=False)
-    status: Mapped[InningsStatus] = mapped_column(
-        Enum(InningsStatus),
-        nullable=False,
-        default=InningsStatus.NOT_STARTED,
-    )
-    target: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
-
-    # Relationships
-    match: Mapped["Match"] = relationship("Match", back_populates="innings")
-    batting_team: Mapped["Team"] = relationship("Team", foreign_keys=[batting_team_id], lazy="selectin")
-    bowling_team: Mapped["Team"] = relationship("Team", foreign_keys=[bowling_team_id], lazy="selectin")
-    deliveries: Mapped[list["Delivery"]] = relationship(
-        "Delivery",
-        back_populates="innings",
-        cascade="all, delete-orphan",
-        order_by="Delivery.delivery_index",
-    )
+    # Active crease & bowler state
+    current_striker_id = Column(Integer, ForeignKey("players.id"), nullable=True)
+    current_non_striker_id = Column(Integer, ForeignKey("players.id"), nullable=True)
+    current_bowler_id = Column(Integer, ForeignKey("players.id"), nullable=True)
 
     __table_args__ = (
         CheckConstraint(
             "batting_team_id != bowling_team_id",
-            name="batting_and_bowling_teams_must_be_different",
+            name="batting_and_bowling_teams_must_be_different"
         ),
         CheckConstraint(
-            "innings_number >= 1 AND innings_number <= 2",
-            name="valid_innings_number",
+            "innings_number >= 1",
+            name="valid_innings_number"
         ),
         UniqueConstraint(
             "match_id", "innings_number",
-            name="unique_match_innings",
+            name="unique_match_innings"
         ),
     )
