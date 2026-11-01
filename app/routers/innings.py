@@ -1,23 +1,24 @@
 from fastapi import APIRouter, Depends, status
 from app.models.innings import Innings
-from app.schemas.innings import InningsCreate, InningsResponse
+from app.schemas.innings import InningsResponse, StartInningsRequest
 from app.services.innings import InningsService, get_innings_service
 
 router = APIRouter(prefix="/matches", tags=["Innings"])
 
 
 @router.post(
-    "/{match_id}/innings",
+    "/{match_id}/innings/{innings_number}/start",
     response_model=InningsResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Start an innings for a match",
+    status_code=status.HTTP_200_OK,
+    summary="Start an innings by setting openers and opening bowler",
 )
-async def create_innings(
+async def start_innings(
     match_id: int,
-    innings_in: InningsCreate,
+    innings_number: int,
+    start_req: StartInningsRequest,
     service: InningsService = Depends(get_innings_service),
 ) -> Innings:
-    return await service.create_innings(match_id, innings_in)
+    return await service.start_innings(match_id, innings_number, start_req)
 
 
 @router.get(

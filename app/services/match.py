@@ -3,10 +3,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.domain.exceptions import EntityNotFoundError, RuleViolationError
 from app.models.match import Match
+from app.repositories.innings import InningsRepository
 from app.repositories.match import MatchRepository
 from app.repositories.squad import SquadRepository
 from app.repositories.team import TeamRepository
 from app.schemas.enums import MatchStatus, TossDecision
+from app.schemas.innings import InningsCreate
 from app.schemas.match import MatchCreate, MatchMOM, MatchToss
 
 
@@ -21,10 +23,12 @@ class MatchService:
         match_repo: MatchRepository,
         team_repo: TeamRepository,
         squad_repo: SquadRepository | None = None,
+        innings_repo: InningsRepository | None = None,
     ):
         self.match_repo = match_repo
         self.team_repo = team_repo
         self.squad_repo = squad_repo
+        self.innings_repo = innings_repo
 
     async def create_match(self, match_in: MatchCreate) -> Match:
         """Schedules a new match between two distinct, existing teams."""
@@ -64,7 +68,7 @@ class MatchService:
         )
 
     async def conduct_toss(self, match_id: int, toss: MatchToss) -> Match:
-        """Conducts the coin toss for a scheduled match."""
+        """Conducts the coin toss for a scheduled match and auto-creates Innings 1."""
         match = await self.get_match(match_id)
 
         # Rule 1: Toss can only be conducted if the match is still scheduled
@@ -92,7 +96,31 @@ class MatchService:
         match.toss_decision = toss.toss_decision
         match.status = MatchStatus.TOSS_DONE
 
-        return await self.match_repo.save(match)
+        saved_match = await self.match_repo.save(match)
+
+        # Auto-create Innings 1 based on toss outcome
+        if self.innings_repo:
+            other_team = match.team_b if toss.toss_winner == match.team_a else match.team_a
+            if toss.toss_decision == TossDecision.BAT:
+                batting_team_id = toss.toss_winner
+                bowling_team_id = other_team
+            else:
+                batting_team_id = other_team
+                bowling_team_id = toss.toss_winner
+
+            existing_inn1 = await self.innings_repo.get_by_match_and_number(match_id, 1)
+            if not existing_inn1:
+                await self.innings_repo.create(
+                    match_id=match_id,
+                    innings_in=InningsCreate(
+                        innings_number=1,
+                        batting_team_id=batting_team_id,
+                        bowling_team_id=bowling_team_id,
+                        target=None,
+                    ),
+                )
+
+        return saved_match
 
     async def abandon_match(self, match_id: int) -> Match:
         """Marks a match as abandoned."""
@@ -103,7 +131,7 @@ class MatchService:
         return await self.match_repo.save(match)
 
     async def set_man_of_the_match(self, match_id: int, mom_in: MatchMOM) -> Match:
-        """Awards Man of the Match to a player."""
+        """Awards Man of the Match to a player and locks match permanently."""
         match = await self.get_match(match_id)
         if match.status != MatchStatus.COMPLETED:
             raise RuleViolationError("Man of the Match can only be awarded after the match has completed")
@@ -116,4 +144,5 @@ async def get_match_service(session: AsyncSession = Depends(get_db)) -> MatchSer
     match_repo = MatchRepository(session)
     team_repo = TeamRepository(session)
     squad_repo = SquadRepository(session)
-    return MatchService(match_repo, team_repo, squad_repo)
+    innings_repo = InningsRepository(session)
+    return MatchService(match_repo, team_repo, squad_repo, innings_repo)
