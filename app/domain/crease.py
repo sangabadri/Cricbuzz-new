@@ -18,10 +18,12 @@ class CreaseState:
         striker_id: int | None = None,
         non_striker_id: int | None = None,
         dismissed_player_ids: list[int] | None = None,
+        awaiting_new_batter: bool = False,
     ):
         self.striker_id: int | None = striker_id
         self.non_striker_id: int | None = non_striker_id
         self.dismissed_player_ids: list[int] = list(dismissed_player_ids or [])
+        self.awaiting_new_batter: bool = awaiting_new_batter
 
         if self.striker_id is not None and self.non_striker_id is not None:
             self._validate_distinct_batters(self.striker_id, self.non_striker_id)
@@ -37,6 +39,7 @@ class CreaseState:
             raise CreaseViolationError("Cannot assign a dismissed player to the crease")
         self.striker_id = striker_id
         self.non_striker_id = non_striker_id
+        self.awaiting_new_batter = False
 
     def set_active_batters(self, striker_id: int, non_striker_id: int) -> None:
         """Updates the active batters at the crease, ensuring valid state."""
@@ -47,6 +50,7 @@ class CreaseState:
             raise CreaseViolationError(f"Non-striker (Player {non_striker_id}) has already been dismissed")
         self.striker_id = striker_id
         self.non_striker_id = non_striker_id
+        self.awaiting_new_batter = False
 
     def rotate_strike(self) -> None:
         """Swaps striker and non-striker ends."""
@@ -54,6 +58,12 @@ class CreaseState:
 
     def rotate_strike_at_over_end(self) -> None:
         """Called at the conclusion of an over to swap ends."""
+        self.rotate_strike()
+
+    def swap_strike(self) -> None:
+        """Manual strike swap called by scorer (e.g. short run or umpire correction)."""
+        if self.striker_id is None or self.non_striker_id is None:
+            raise CreaseViolationError("Cannot swap strike when crease is incomplete")
         self.rotate_strike()
 
     def handle_runs(self, runs: int) -> None:
@@ -72,10 +82,7 @@ class CreaseState:
         crossed_runs: int = 0,
     ) -> None:
         """
-        Enforces dismissal rules, marks player as dismissed, and introduces a new batter.
-        - Non-rebatting rule: A dismissed player cannot bat again.
-        - Non-striker dismissal: Can only be run out.
-        - Striker dismissal: Can be bowled, caught, lbw, stumped, hit wicket, run out, etc.
+        Enforces dismissal rules, marks player as dismissed, and introduces or awaits a new batter.
         """
         if out_player_id not in (self.striker_id, self.non_striker_id):
             raise CreaseViolationError(
@@ -90,9 +97,11 @@ class CreaseState:
                     f"Non-striker cannot be dismissed by {wicket_type.value}. Only run-out is valid for the non-striker."
                 )
 
-        # Enforce non-rebatting rule for incoming batter
+        # Mark player out
+        self.dismissed_player_ids.append(out_player_id)
+
         if new_batter_id is not None:
-            if new_batter_id in self.dismissed_player_ids or new_batter_id == out_player_id:
+            if new_batter_id in self.dismissed_player_ids:
                 raise CreaseViolationError(
                     f"Player {new_batter_id} has already been dismissed and cannot bat again."
                 )
@@ -101,17 +110,39 @@ class CreaseState:
                 raise CreaseViolationError(
                     f"Player {new_batter_id} is already at the crease as the other batter."
                 )
+            if out_player_id == self.striker_id:
+                self.striker_id = new_batter_id
+            else:
+                self.non_striker_id = new_batter_id
+            self.awaiting_new_batter = False
+        else:
+            # Vacate the crease spot and await incoming batter
+            if out_player_id == self.striker_id:
+                self.striker_id = None
+            else:
+                self.non_striker_id = None
+            self.awaiting_new_batter = True
 
-        # Mark player out
-        self.dismissed_player_ids.append(out_player_id)
+        if crossed_runs % 2 != 0:
+            self.rotate_strike()
 
-        # Replace dismissed player with incoming batter
-        if out_player_id == self.striker_id:
+    def assign_incoming_batter(self, new_batter_id: int) -> None:
+        """Places the incoming batter at the vacant crease spot."""
+        if not self.awaiting_new_batter and self.striker_id is not None and self.non_striker_id is not None:
+            raise CreaseViolationError("Crease is already full; no incoming batter is expected")
+
+        if new_batter_id in self.dismissed_player_ids:
+            raise CreaseViolationError(
+                f"Player {new_batter_id} has already been dismissed and cannot bat again"
+            )
+        active_other = self.striker_id or self.non_striker_id
+        if new_batter_id == active_other:
+            raise CreaseViolationError(
+                f"Player {new_batter_id} is already at the crease"
+            )
+
+        if self.striker_id is None:
             self.striker_id = new_batter_id
         else:
             self.non_striker_id = new_batter_id
-
-        # In modern MCC rules (effective 2022), incoming batter always takes strike on caught dismissals.
-        # For run out with odd completed runs, batters might have crossed before the run-out:
-        if crossed_runs % 2 != 0:
-            self.rotate_strike()
+        self.awaiting_new_batter = False

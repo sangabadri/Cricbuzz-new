@@ -33,6 +33,7 @@ class InningsAggregate:
         # Progression & scoring counters
         self.current_over: int = 0
         self.current_ball_in_over: int = 0  # Legal balls in current over (0 to 6)
+        self.current_attempt_in_over: int = 0  # Sequential delivery attempt in current over (1, 2, ...)
         self.total_legal_balls: int = 0
         self.total_runs: int = 0
         self.total_wickets: int = 0
@@ -45,6 +46,8 @@ class InningsAggregate:
         # Completion state
         self.is_completed: bool = False
         self.completion_reason: str | None = None
+        self.win_margin_runs: int | None = None
+        self.win_margin_wickets: int | None = None
 
         # Stored delivery records
         self.deliveries: list[dict[str, Any]] = []
@@ -56,6 +59,35 @@ class InningsAggregate:
     @property
     def balls_in_over(self) -> int:
         return self.total_legal_balls % self.format_rules.balls_per_over
+
+    def set_bowler(self, bowler_id: int) -> None:
+        """
+        Explicitly assigns the bowler for the upcoming over.
+        Called by scorer console before the first ball of an over.
+        """
+        if self.current_ball_in_over > 0:
+            raise OverProgressionError(
+                f"Cannot change bowler mid-over (over {self.current_over} is in progress)"
+            )
+        self.validate_bowler(bowler_id)
+        self.current_bowler_id = bowler_id
+
+    def get_eligible_bowlers(self, squad_bowler_ids: list[int]) -> list[int]:
+        """
+        Returns list of player IDs from fielding squad eligible to bowl next over.
+        Filters out current batters, consecutive over bowler, and quota-maxed bowlers.
+        """
+        eligible: list[int] = []
+        for pid in squad_bowler_ids:
+            if pid in (self.crease.striker_id, self.crease.non_striker_id):
+                continue
+            if self.last_completed_over_bowler_id is not None and pid == self.last_completed_over_bowler_id:
+                continue
+            completed = self.bowler_overs.get(pid, 0)
+            if completed >= self.format_rules.max_bowler_overs:
+                continue
+            eligible.append(pid)
+        return eligible
 
     def validate_bowler(self, bowler_id: int) -> None:
         """Enforces bowler quota and consecutive-over restrictions."""
@@ -82,14 +114,29 @@ class InningsAggregate:
                     f"Bowler {bowler_id} cannot bowl this ball."
                 )
 
+    @staticmethod
+    def validate_extras_rules(extra_type: ExtraType | None, extras: int) -> None:
+        """Validates cricket extras rules."""
+        if extras < 0:
+            raise RuleViolationError("Extras cannot be negative")
+        if extra_type in (ExtraType.WIDE, ExtraType.NOBALL) and extras < 1:
+            raise RuleViolationError(f"Extras must be at least 1 for {extra_type.value}")
+        if extra_type is None and extras != 0:
+            raise RuleViolationError("Extras must be 0 when extra_type is None")
+
     def validate_dismissal_rules(
         self,
         wicket_type: WicketType | None,
         player_out_id: int | None,
         bowler_id: int,
         fielder_id: int | None,
+        striker_id: int | None = None,
+        non_striker_id: int | None = None,
     ) -> None:
         """Validates cricket rules for wickets, dismissals, and fielders."""
+        effective_striker = striker_id if striker_id is not None else (self.crease.striker_id if hasattr(self, "crease") else None)
+        effective_non_striker = non_striker_id if non_striker_id is not None else (self.crease.non_striker_id if hasattr(self, "crease") else None)
+
         if wicket_type is None:
             if player_out_id is not None:
                 raise RuleViolationError("player_out_id must be None when no wicket occurs")
@@ -100,11 +147,12 @@ class InningsAggregate:
         if player_out_id is None:
             raise RuleViolationError("player_out_id is required when a wicket occurs")
 
-        if player_out_id not in (self.crease.striker_id, self.crease.non_striker_id):
-            raise CreaseViolationError(
-                f"player_out_id {player_out_id} must be either the striker ({self.crease.striker_id}) "
-                f"or non-striker ({self.crease.non_striker_id})"
-            )
+        if effective_striker is not None and effective_non_striker is not None:
+            if player_out_id not in (effective_striker, effective_non_striker):
+                raise CreaseViolationError(
+                    f"player_out_id {player_out_id} must be either the striker ({effective_striker}) "
+                    f"or non-striker ({effective_non_striker})"
+                )
 
         if wicket_type == WicketType.CAUGHT:
             if fielder_id is None:
@@ -116,7 +164,7 @@ class InningsAggregate:
 
     def record_ball(
         self,
-        bowler_id: int,
+        bowler_id: int | None = None,
         runs: int = 0,
         extra_type: ExtraType | None = None,
         extras: int = 0,
@@ -135,6 +183,11 @@ class InningsAggregate:
         if self.is_completed:
             raise OverProgressionError(f"Innings is already completed: {self.completion_reason}")
 
+        if self.crease.awaiting_new_batter:
+            raise CreaseViolationError(
+                "Wicket fell! Must set incoming batter before bowling the next ball."
+            )
+
         # Setup or synchronize crease if explicit batters were passed
         if explicit_striker_id is not None and explicit_non_striker_id is not None:
             if self.crease.striker_id is None and self.crease.non_striker_id is None:
@@ -143,36 +196,46 @@ class InningsAggregate:
                 self.crease.striker_id != explicit_striker_id
                 or self.crease.non_striker_id != explicit_non_striker_id
             ):
-                # Update/validate crease alignment
                 self.crease.set_active_batters(explicit_striker_id, explicit_non_striker_id)
 
         if self.crease.striker_id is None or self.crease.non_striker_id is None:
             raise CreaseViolationError("Striker and non-striker must be established on the crease")
 
-        # 1. Validate basic delivery values
+        # 1. Validate basic delivery values and extras
         if not (0 <= runs <= 6):
             raise RuleViolationError("Runs must be between 0 and 6")
-        if extras < 0:
-            raise RuleViolationError("Extras cannot be negative")
+        self.validate_extras_rules(extra_type, extras)
 
-        if extra_type in (ExtraType.WIDE, ExtraType.NOBALL) and extras < 1:
-            raise RuleViolationError(f"Extras must be at least 1 for {extra_type.value}")
-        if extra_type is None and extras != 0:
-            raise RuleViolationError("Extras must be 0 when extra_type is None")
+        # 2. Determine and validate bowler
+        if bowler_id is None:
+            if self.current_bowler_id is None:
+                raise OverProgressionError("No bowler assigned for this over. Set bowler first.")
+            bowler_id = self.current_bowler_id
+        else:
+            self.validate_bowler(bowler_id)
+            if self.current_bowler_id is None:
+                self.current_bowler_id = bowler_id
 
-        # 2. Validate bowler eligibility
-        self.validate_bowler(bowler_id)
-        if self.current_bowler_id is None:
-            self.current_bowler_id = bowler_id
+        # 3. Auto-derive player_out_id for non-runout dismissals if omitted
+        if wicket_type is not None:
+            if player_out_id is None:
+                if wicket_type != WicketType.RUN_OUT:
+                    player_out_id = self.crease.striker_id
+                else:
+                    raise RuleViolationError("player_out_id is required for run out dismissals")
+            elif wicket_type != WicketType.RUN_OUT and player_out_id != self.crease.striker_id:
+                raise CreaseViolationError(
+                    f"Only the striker ({self.crease.striker_id}) can be dismissed for {wicket_type.value}"
+                )
 
-        # 3. Validate dismissal & fielder rules
+        # Validate dismissal & fielder rules
         self.validate_dismissal_rules(wicket_type, player_out_id, bowler_id, fielder_id)
 
-        # 4. Determine ball characteristics
+        # 4. Determine ball characteristics & sequential attempt
         is_legal = extra_type not in (ExtraType.WIDE, ExtraType.NOBALL)
         over_number = self.current_over
-        # Legal ball number in over (1 to 6), or current count for wide/noball
-        ball_number = (self.current_ball_in_over + 1) if is_legal else max(1, self.current_ball_in_over + 1)
+        self.current_attempt_in_over += 1
+        ball_number = self.current_attempt_in_over
         delivery_index = len(self.deliveries) + 1
 
         active_striker_id = self.crease.striker_id
@@ -206,8 +269,9 @@ class InningsAggregate:
         over_completed = False
         if is_legal and self.current_ball_in_over >= self.format_rules.balls_per_over:
             over_completed = True
-            # Batters swap ends at the conclusion of an over
-            self.crease.rotate_strike_at_over_end()
+            # Batters swap ends at the conclusion of an over if both are established
+            if self.crease.striker_id is not None and self.crease.non_striker_id is not None:
+                self.crease.rotate_strike_at_over_end()
 
             # Record bowler completed over
             self.bowler_overs[bowler_id] = self.bowler_overs.get(bowler_id, 0) + 1
@@ -215,6 +279,7 @@ class InningsAggregate:
             self.current_bowler_id = None
             self.current_over += 1
             self.current_ball_in_over = 0
+            self.current_attempt_in_over = 0
 
         # 9. Evaluate Innings Completion conditions
         self._check_innings_completion()
@@ -223,6 +288,7 @@ class InningsAggregate:
             "delivery_index": delivery_index,
             "over": over_number,
             "ball": ball_number,
+            "is_legal_ball": is_legal,
             "bowler_id": bowler_id,
             "batsman_id": active_striker_id,
             "non_striker_id": active_non_striker_id,
@@ -241,20 +307,37 @@ class InningsAggregate:
         return delivery_record
 
     def _check_innings_completion(self) -> None:
-        """Determines if the innings has reached a terminal condition."""
+        """Determines if the innings has reached a terminal condition and computes margins."""
         if self.total_wickets >= self.format_rules.max_wickets:
             self.is_completed = True
             self.completion_reason = f"All out ({self.total_wickets} wickets lost)"
+            if self.target is not None:
+                if self.total_runs < self.target - 1:
+                    self.win_margin_runs = (self.target - 1) - self.total_runs
+                    self.win_margin_wickets = None
+                elif self.total_runs == self.target - 1:
+                    self.win_margin_runs = 0
+                    self.win_margin_wickets = 0
+            return
+
+        # Check if target achieved (must be checked BEFORE overs completed!)
+        if self.target is not None and self.total_runs >= self.target:
+            self.is_completed = True
+            self.completion_reason = f"Target of {self.target} runs reached ({self.total_runs} scored)"
+            self.win_margin_wickets = self.format_rules.max_wickets - self.total_wickets
+            self.win_margin_runs = None
             return
 
         if self.total_legal_balls >= self.format_rules.max_overs * self.format_rules.balls_per_over:
             self.is_completed = True
             self.completion_reason = f"Completed all {self.format_rules.max_overs} overs"
-            return
-
-        if self.target is not None and self.total_runs >= self.target:
-            self.is_completed = True
-            self.completion_reason = f"Target of {self.target} runs reached ({self.total_runs} scored)"
+            if self.target is not None:
+                if self.total_runs < self.target - 1:
+                    self.win_margin_runs = (self.target - 1) - self.total_runs
+                    self.win_margin_wickets = None
+                elif self.total_runs == self.target - 1:
+                    self.win_margin_runs = 0
+                    self.win_margin_wickets = 0
             return
 
     @classmethod
@@ -266,6 +349,9 @@ class InningsAggregate:
         target: int | None,
         deliveries: list[Any],
         status: InningsStatus | None = None,
+        current_striker_id: int | None = None,
+        current_non_striker_id: int | None = None,
+        current_bowler_id: int | None = None,
     ) -> "InningsAggregate":
         """
         Reconstructs an InningsAggregate from persisted deliveries and metadata.
@@ -281,9 +367,13 @@ class InningsAggregate:
 
         for d in deliveries:
             # Replay each delivery state
-            d_runs = getattr(d, "runs", d.get("runs", 0) if isinstance(d, dict) else 0)
+            d_runs = getattr(d, "runs", 0) if not isinstance(d, dict) else d.get("runs", 0)
+            if d_runs is None:
+                d_runs = 0
             d_extra_type = getattr(d, "extra_type", d.get("extra_type", None) if isinstance(d, dict) else None)
-            d_extras = getattr(d, "extras", d.get("extras", 0) if isinstance(d, dict) else 0)
+            d_extras = getattr(d, "extras", 0) if not isinstance(d, dict) else d.get("extras", 0)
+            if d_extras is None:
+                d_extras = 0
             d_bowler_id = getattr(d, "bowler_id", d.get("bowler_id", None) if isinstance(d, dict) else None)
             d_striker_id = getattr(d, "batsman_id", d.get("batsman_id", None) if isinstance(d, dict) else None)
             d_non_striker_id = getattr(d, "non_striker_id", d.get("non_striker_id", None) if isinstance(d, dict) else None)
@@ -313,6 +403,8 @@ class InningsAggregate:
                     aggregate.crease.striker_id = d_new_batter_id
                 elif d_player_out == aggregate.crease.non_striker_id:
                     aggregate.crease.non_striker_id = d_new_batter_id
+                if d_new_batter_id is None and len(aggregate.crease.dismissed_player_ids) < format_rules.max_wickets:
+                    aggregate.crease.awaiting_new_batter = True
 
             running_runs = d_extras if d_extra_type in (ExtraType.BYE, ExtraType.LEGBYE) else d_runs
             if d_wicket_type is not None:
@@ -320,6 +412,14 @@ class InningsAggregate:
                     aggregate.crease.rotate_strike()
             elif aggregate.crease.striker_id is not None:
                 aggregate.crease.handle_runs(running_runs)
+
+            # Over attempt tracking
+            if aggregate.current_over != d_over:
+                aggregate.current_over = d_over
+                aggregate.current_attempt_in_over = 0
+                aggregate.current_ball_in_over = 0
+
+            aggregate.current_attempt_in_over += 1
 
             if is_legal:
                 aggregate.current_ball_in_over += 1
@@ -337,11 +437,13 @@ class InningsAggregate:
                 aggregate.current_bowler_id = None
                 aggregate.current_over = d_over + 1
                 aggregate.current_ball_in_over = 0
+                aggregate.current_attempt_in_over = 0
 
             aggregate.deliveries.append({
                 "delivery_index": d_delivery_index or len(aggregate.deliveries) + 1,
                 "over": d_over,
                 "ball": d_ball,
+                "is_legal_ball": is_legal,
                 "bowler_id": d_bowler_id,
                 "batsman_id": d_striker_id,
                 "non_striker_id": d_non_striker_id,
@@ -356,6 +458,25 @@ class InningsAggregate:
                 "is_legal": is_legal,
                 "over_completed": is_legal and aggregate.current_ball_in_over == 0,
             })
+
+        # Override/rehydrate from DB if provided (especially for 0-delivery or live crease state)
+        if current_striker_id is not None:
+            aggregate.crease.striker_id = current_striker_id
+        elif aggregate.crease.striker_id is None and len(aggregate.crease.dismissed_player_ids) > 0:
+            if len(aggregate.crease.dismissed_player_ids) < format_rules.max_wickets:
+                aggregate.crease.awaiting_new_batter = True
+
+        if current_non_striker_id is not None:
+            aggregate.crease.non_striker_id = current_non_striker_id
+        elif aggregate.crease.non_striker_id is None and len(aggregate.crease.dismissed_player_ids) > 0:
+            if len(aggregate.crease.dismissed_player_ids) < format_rules.max_wickets:
+                aggregate.crease.awaiting_new_batter = True
+
+        if current_bowler_id is not None:
+            aggregate.current_bowler_id = current_bowler_id
+
+        if aggregate.crease.striker_id is not None and aggregate.crease.non_striker_id is not None:
+            aggregate.crease.awaiting_new_batter = False
 
         if status == InningsStatus.COMPLETED:
             aggregate.is_completed = True

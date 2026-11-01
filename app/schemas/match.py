@@ -30,6 +30,8 @@ class MatchResponse(MatchCreate):
     toss_winner: int | None = None
     toss_decision: TossDecision | None = None
     winner: int | None = None
+    win_margin_runs: int | None = None
+    win_margin_wickets: int | None = None
     mom: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
