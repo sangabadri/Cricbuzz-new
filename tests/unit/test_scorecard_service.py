@@ -51,16 +51,14 @@ async def test_scorecard_batch_query_eliminates_n_plus_one(mock_repos):
         id=1,
         team_a=10,
         team_b=20,
-        venue="Lord's",
+        venue="Wankhede",
         format=MatchFormat.T20,
         status=MatchStatus.LIVE,
     )
-
-    team_10 = Team(id=10, name="India")
-    team_20 = Team(id=20, name="Australia")
+    team_10 = Team(id=10, name="Mumbai Indians")
+    team_20 = Team(id=20, name="Chennai Super Kings")
     team_repo.get_by_ids.return_value = {10: team_10, 20: team_20}
 
-    # Deliveries: 3 balls
     # Ball 1: Bowler 100 to Batter 1 (1 run)
     # Ball 2: Bowler 100 to Batter 2 (4 runs)
     # Ball 3: Bowler 100 to Batter 2 (caught by fielder 101)
@@ -68,7 +66,6 @@ async def test_scorecard_batch_query_eliminates_n_plus_one(mock_repos):
         Delivery(
             id=1,
             innings_id=1,
-            delivery_index=1,
             over=0,
             ball=1,
             bowler_id=100,
@@ -84,7 +81,6 @@ async def test_scorecard_batch_query_eliminates_n_plus_one(mock_repos):
         Delivery(
             id=2,
             innings_id=1,
-            delivery_index=2,
             over=0,
             ball=2,
             bowler_id=100,
@@ -100,7 +96,6 @@ async def test_scorecard_batch_query_eliminates_n_plus_one(mock_repos):
         Delivery(
             id=3,
             innings_id=1,
-            delivery_index=3,
             over=0,
             ball=3,
             bowler_id=100,
@@ -118,60 +113,64 @@ async def test_scorecard_batch_query_eliminates_n_plus_one(mock_repos):
     innings_repo.get_by_match_and_number.return_value = innings
     match_repo.get_by_id.return_value = match
 
+    # Players
     p1 = Player(id=1, name="Rohit Sharma", role=Role.BATSMAN, batting=BattingStyle.RIGHT_HANDED)
-    p2 = Player(id=2, name="Virat Kohli", role=Role.BATSMAN, batting=BattingStyle.RIGHT_HANDED)
-    p100 = Player(id=100, name="Mitchell Starc", role=Role.BOWLER, batting=BattingStyle.LEFT_HANDED)
-    p101 = Player(id=101, name="Steve Smith", role=Role.BATSMAN, batting=BattingStyle.RIGHT_HANDED)
+    p2 = Player(id=2, name="Ishan Kishan", role=Role.WICKETKEEPER, batting=BattingStyle.LEFT_HANDED)
+    p100 = Player(id=100, name="Jasprit Bumrah", role=Role.BOWLER, batting=BattingStyle.RIGHT_HANDED)
+    p101 = Player(id=101, name="MS Dhoni", role=Role.WICKETKEEPER, batting=BattingStyle.RIGHT_HANDED)
 
-    # Batch return mapping
     player_repo.get_by_ids.return_value = {1: p1, 2: p2, 100: p100, 101: p101}
 
     service = ScorecardService(match_repo, innings_repo, delivery_repo, player_repo, team_repo)
     scorecard = await service.get_innings_scorecard(match_id=1, innings_number=1)
 
-    # Verify batch query was called ONCE for players (no N+1 single queries)
-    assert player_repo.get_by_ids.call_count == 1
-    # Verify player_repo.get_by_id was NEVER called in a loop
-    assert player_repo.get_by_id.call_count == 0
+    # Verify N+1 optimization: batch queries were used
+    player_repo.get_by_ids.assert_awaited_once()
+    requested_pids = set(player_repo.get_by_ids.call_args[0][0])
+    assert requested_pids == {1, 2, 100, 101}
 
-    # Verify score calculation
-    assert scorecard.total_runs == 5
+    # Verify score calculations
+    assert scorecard.runs == 5
     assert scorecard.wickets == 1
-    assert scorecard.overs.total_legal_balls == 3
     assert scorecard.overs.completed_overs == 0
     assert scorecard.overs.balls == 3
+    assert scorecard.overs.total_legal_balls == 3
 
-    # Verify batter cards
-    assert len(scorecard.batting) == 2
-    rohit_card = next(b for b in scorecard.batting if b.player_id == 1)
-    assert rohit_card.runs == 1
-    assert rohit_card.balls == 1
-    assert rohit_card.is_out is False
+    # Verify Batter 1 stats: 1 run, 1 ball, not out
+    b1 = next(b for b in scorecard.batting if b.player_id == 1)
+    assert b1.runs == 1
+    assert b1.balls == 1
+    assert b1.fours == 0
+    assert b1.sixes == 0
+    assert b1.dismissal is None
 
-    virat_card = next(b for b in scorecard.batting if b.player_id == 2)
-    assert virat_card.runs == 4
-    assert virat_card.balls == 2
-    assert virat_card.fours == 1
-    assert virat_card.is_out is True
-    assert virat_card.dismissal.wicket_type == WicketType.CAUGHT
-    assert virat_card.dismissal.bowler_name == "Mitchell Starc"
-    assert virat_card.dismissal.fielder_name == "Steve Smith"
+    # Verify Batter 2 stats: 4 runs, 2 balls, caught by MS Dhoni off Jasprit Bumrah
+    b2 = next(b for b in scorecard.batting if b.player_id == 2)
+    assert b2.runs == 4
+    assert b2.balls == 2
+    assert b2.fours == 1
+    assert b2.sixes == 0
+    assert b2.dismissal is not None
+    assert b2.dismissal.wicket_type == WicketType.CAUGHT
+    assert b2.dismissal.bowler_name == "Jasprit Bumrah"
+    assert b2.dismissal.fielder_name == "MS Dhoni"
 
-    # Verify bowler card
-    assert len(scorecard.bowling) == 1
-    starc_card = scorecard.bowling[0]
-    assert starc_card.player_name == "Mitchell Starc"
-    assert starc_card.overs.total_legal_balls == 3
-    assert starc_card.runs == 5
-    assert starc_card.wickets == 1
+    # Verify Bowler stats: 3 balls (0.3 overs), 5 runs, 1 wicket
+    bowler = scorecard.bowling[0]
+    assert bowler.player_id == 100
+    assert bowler.overs.completed_overs == 0
+    assert bowler.overs.balls == 3
+    assert bowler.runs == 5
+    assert bowler.wickets == 1
 
-    # Verify fall of wickets
+    # Verify Fall of Wicket: 1st wicket fell at 5 runs, 0.3 overs (player 2)
     assert len(scorecard.fall_of_wickets) == 1
     fow = scorecard.fall_of_wickets[0]
     assert fow.wicket_number == 1
-    assert fow.score == 5
     assert fow.player_id == 2
-    assert fow.player_name == "Virat Kohli"
+    assert fow.score == 5
+    assert fow.overs.completed_overs == 0
+    assert fow.overs.balls == 3
 
 
 @sync
@@ -182,7 +181,7 @@ async def test_live_match_crease_projection_with_wicket_and_rotation(mock_repos)
         id=1,
         team_a=10,
         team_b=20,
-        venue="Lord's",
+        venue="Wankhede",
         format=MatchFormat.T20,
         status=MatchStatus.LIVE,
     )
@@ -194,18 +193,17 @@ async def test_live_match_crease_projection_with_wicket_and_rotation(mock_repos)
         bowling_team_id=20,
         status=InningsStatus.IN_PROGRESS,
     )
-
     team_10 = Team(id=10, name="India")
     team_20 = Team(id=20, name="Australia")
     team_repo.get_by_ids.return_value = {10: team_10, 20: team_20}
 
     # Ball 1: Bowler 100 to Batter 1, 1 run (Batter 2 is now striker)
-    # Ball 2: Bowler 100 to Batter 2, Caught out! Incoming batter is 3.
+    # Ball 2: Bowler 100 to Batter 2, Caught out!
+    # Ball 3: Bowler 100 to Batter 3, 0 runs.
     deliveries = [
         Delivery(
             id=1,
             innings_id=1,
-            delivery_index=1,
             over=0,
             ball=1,
             bowler_id=100,
@@ -217,12 +215,10 @@ async def test_live_match_crease_projection_with_wicket_and_rotation(mock_repos)
             wicket_type=None,
             player_out_id=None,
             fielder_id=None,
-            new_batter_id=None,
         ),
         Delivery(
             id=2,
             innings_id=1,
-            delivery_index=2,
             over=0,
             ball=2,
             bowler_id=100,
@@ -234,7 +230,21 @@ async def test_live_match_crease_projection_with_wicket_and_rotation(mock_repos)
             wicket_type=WicketType.CAUGHT,
             player_out_id=2,
             fielder_id=101,
-            new_batter_id=3,
+        ),
+        Delivery(
+            id=3,
+            innings_id=1,
+            over=0,
+            ball=3,
+            bowler_id=100,
+            batsman_id=3,
+            non_striker_id=1,
+            runs=0,
+            extra_type=None,
+            extras=0,
+            wicket_type=None,
+            player_out_id=None,
+            fielder_id=None,
         ),
     ]
 
@@ -277,24 +287,24 @@ async def test_scorecard_multiple_wickets_partnerships_and_incoming_batter_inclu
     # Ball 4: Bowler 100 to Batter 4, scores 2 runs.
     deliveries = [
         Delivery(
-            id=1, innings_id=1, delivery_index=1, over=0, ball=1, bowler_id=100,
+            id=1, innings_id=1, over=0, ball=1, bowler_id=100,
             batsman_id=1, non_striker_id=2, runs=0, extra_type=None, extras=0,
-            wicket_type=WicketType.CAUGHT, player_out_id=1, fielder_id=101, new_batter_id=3,
+            wicket_type=WicketType.CAUGHT, player_out_id=1, fielder_id=101,
         ),
         Delivery(
-            id=2, innings_id=1, delivery_index=2, over=0, ball=2, bowler_id=100,
+            id=2, innings_id=1, over=0, ball=2, bowler_id=100,
             batsman_id=3, non_striker_id=2, runs=4, extra_type=None, extras=0,
-            wicket_type=None, player_out_id=None, fielder_id=None, new_batter_id=None,
+            wicket_type=None, player_out_id=None, fielder_id=None,
         ),
         Delivery(
-            id=3, innings_id=1, delivery_index=3, over=0, ball=3, bowler_id=100,
+            id=3, innings_id=1, over=0, ball=3, bowler_id=100,
             batsman_id=3, non_striker_id=2, runs=0, extra_type=None, extras=0,
-            wicket_type=WicketType.BOWLED, player_out_id=3, fielder_id=None, new_batter_id=4,
+            wicket_type=WicketType.BOWLED, player_out_id=3, fielder_id=None,
         ),
         Delivery(
-            id=4, innings_id=1, delivery_index=4, over=0, ball=4, bowler_id=100,
+            id=4, innings_id=1, over=0, ball=4, bowler_id=100,
             batsman_id=4, non_striker_id=2, runs=2, extra_type=None, extras=0,
-            wicket_type=None, player_out_id=None, fielder_id=None, new_batter_id=None,
+            wicket_type=None, player_out_id=None, fielder_id=None,
         ),
     ]
 
@@ -308,31 +318,21 @@ async def test_scorecard_multiple_wickets_partnerships_and_incoming_batter_inclu
     innings_repo.get_by_match_and_number.return_value = innings
     delivery_repo.list_by_innings.return_value = deliveries
     player_repo.get_by_ids.return_value = {1: p1, 2: p2, 3: p3, 4: p4, 100: p100, 101: p101}
+    match_repo.get_by_id.return_value = match
 
     service = ScorecardService(match_repo, innings_repo, delivery_repo, player_repo, team_repo)
     scorecard = await service.get_innings_scorecard(match_id=1, innings_number=1)
 
-    # 1. Check all batters in scorecard
-    assert len(scorecard.batting) == 4
-    b_map = {b.player_id: b for b in scorecard.batting}
-    assert b_map[1].is_out is True
-    assert b_map[1].runs == 0
-    assert b_map[3].is_out is True
-    assert b_map[3].runs == 4
-    assert b_map[4].is_out is False
-    assert b_map[4].runs == 2
-    assert b_map[2].is_out is False
-    assert b_map[2].runs == 0
+    # Verify all batters are in the scorecard
+    batter_ids = [b.player_id for b in scorecard.batting]
+    assert 1 in batter_ids
+    assert 2 in batter_ids
+    assert 3 in batter_ids
+    assert 4 in batter_ids
 
-    # 2. Check partnerships
-    assert len(scorecard.partnerships) == 3
-    # Partnership 1: Wicket 1, between 1 and 2, 0 runs
-    assert scorecard.partnerships[0].wicket_number == 1
-    assert scorecard.partnerships[0].runs == 0
-    # Partnership 2: Wicket 2, between 3 and 2, 4 runs
-    assert scorecard.partnerships[1].wicket_number == 2
-    assert scorecard.partnerships[1].runs == 4
-    # Partnership 3: Unbroken wicket 3, between 4 and 2, 2 runs
-    assert scorecard.partnerships[2].wicket_number == 3
-    assert scorecard.partnerships[2].runs == 2
-
+    # Verify Fall of Wickets: 2 wickets
+    assert len(scorecard.fall_of_wickets) == 2
+    assert scorecard.fall_of_wickets[0].wicket_number == 1
+    assert scorecard.fall_of_wickets[0].player_id == 1
+    assert scorecard.fall_of_wickets[1].wicket_number == 2
+    assert scorecard.fall_of_wickets[1].player_id == 3

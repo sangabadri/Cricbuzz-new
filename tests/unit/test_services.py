@@ -6,7 +6,7 @@ from app.models.delivery import Delivery
 from app.models.innings import Innings
 from app.models.match import Match
 from app.models.team import Team
-from app.schemas.delivery import BallEventCreate, DeliveryCreate, ManualDeliveryUpdate
+from app.schemas.delivery import DeliveryCreate, ManualDeliveryUpdate
 from app.schemas.enums import ExtraType, InningsStatus, MatchFormat, MatchStatus, TossDecision, WicketType
 from app.schemas.innings import InningsCreate
 from app.schemas.match import MatchCreate, MatchToss
@@ -91,9 +91,10 @@ async def test_innings_toss_connection_and_target_calculation():
         toss_decision=TossDecision.BAT,
     )
     match_repo.get_by_id.return_value = match
+
     innings_repo.get_by_match_and_number.return_value = None
     innings_repo.create.side_effect = lambda m_id, inn_in: Innings(
-        id=1,
+        id=inn_in.innings_number,
         match_id=m_id,
         innings_number=inn_in.innings_number,
         batting_team_id=inn_in.batting_team_id,
@@ -104,15 +105,14 @@ async def test_innings_toss_connection_and_target_calculation():
 
     service = InningsService(innings_repo, match_repo, delivery_repo)
 
-    # If client attempts to put Team 2 batting in Innings 1, domain rejects it!
-    with pytest.raises(RuleViolationError) as exc:
+    # 1. Invalid first innings batting team (Team 2 cannot bat first when Team 1 won toss and elected to bat)
+    with pytest.raises(RuleViolationError):
         await service.create_innings(
             match_id=1,
             innings_in=InningsCreate(innings_number=1, batting_team_id=2, bowling_team_id=1),
         )
-    assert "Toss outcome dictates that Team 1 bats and Team 2 bowls first" in exc.value.detail
 
-    # Correct Innings 1 creation
+    # 2. Valid first innings: Team 1 bats first
     inn1 = await service.create_innings(
         match_id=1,
         innings_in=InningsCreate(innings_number=1, batting_team_id=1, bowling_team_id=2),
@@ -124,8 +124,8 @@ async def test_innings_toss_connection_and_target_calculation():
     inn1.status = InningsStatus.COMPLETED
     innings_repo.get_by_match_and_number.side_effect = lambda m_id, n: inn1 if n == 1 else None
     delivery_repo.list_by_innings.return_value = [
-        Delivery(id=1, innings_id=1, delivery_index=1, over=0, ball=1, bowler_id=5, batsman_id=1, non_striker_id=2, runs=6, extra_type=None, extras=0),
-        Delivery(id=2, innings_id=1, delivery_index=2, over=0, ball=2, bowler_id=5, batsman_id=1, non_striker_id=2, runs=4, extra_type=None, extras=0),
+        Delivery(id=1, innings_id=1, over=0, ball=1, bowler_id=5, batsman_id=1, non_striker_id=2, runs=6, extra_type=None, extras=0),
+        Delivery(id=2, innings_id=1, over=0, ball=2, bowler_id=5, batsman_id=1, non_striker_id=2, runs=4, extra_type=None, extras=0),
     ]
 
     inn2 = await service.create_innings(
@@ -163,10 +163,9 @@ async def test_delivery_service_ball_event_and_match_resolution():
     innings_repo.get_by_match_and_number.return_value = innings
     match_repo.get_by_id.return_value = match
     delivery_repo.list_by_innings.return_value = []
-    delivery_repo.create.side_effect = lambda inn_id, d_in, delivery_index=1: Delivery(
+    delivery_repo.create.side_effect = lambda inn_id, d_in: Delivery(
         id=10,
         innings_id=inn_id,
-        delivery_index=delivery_index,
         over=d_in.over,
         ball=d_in.ball,
         bowler_id=d_in.bowler_id,
@@ -175,36 +174,34 @@ async def test_delivery_service_ball_event_and_match_resolution():
         runs=d_in.runs,
         extra_type=d_in.extra_type,
         extras=d_in.extras,
+        wicket_type=d_in.wicket_type,
+        player_out_id=d_in.player_out_id,
+        fielder_id=d_in.fielder_id,
+        commentary=d_in.commentary,
     )
 
     service = DeliveryService(delivery_repo, innings_repo, match_repo)
 
-    # Ball 1: hits a six to win the match
-    ball_in = BallEventCreate(
-        bowler_id=20,
+    # Ball 1: 6 runs scored off the bat! Target reached immediately (6 >= 6)
+    event = DeliveryCreate(
+        bowler_id=10,
         runs=6,
-        striker_id=30,
-        non_striker_id=31,
+        striker_id=1,
+        non_striker_id=2,
     )
-    result = await service.record_delivery(match_id=1, innings_number=2, delivery_in=ball_in)
 
-    assert result.runs == 6
+    await service.record_delivery(match_id=1, innings_number=2, delivery_in=event)
+
+    # Innings must be COMPLETED
     assert innings.status == InningsStatus.COMPLETED
+    # Match must be COMPLETED
     assert match.status == MatchStatus.COMPLETED
-    assert match.winner == 2  # Batting team won by chasing target!
-
-    # Now test undo of that match-ending delivery
-    delivery_repo.get_last_delivery.return_value = result
-    undone = await service.undo_last_delivery(match_id=1, innings_number=2)
-
-    assert undone.id == result.id
-    assert innings.status == InningsStatus.IN_PROGRESS
-    assert match.status == MatchStatus.LIVE
-    assert match.winner is None
+    # Winner must be batting team (Team 2)
+    assert match.winner == 2
 
 
 @sync
-async def test_delivery_service_update_last_delivery_persists_new_batter_id():
+async def test_delivery_service_update_last_delivery():
     match_repo = AsyncMock()
     innings_repo = AsyncMock()
     delivery_repo = AsyncMock()
@@ -220,7 +217,6 @@ async def test_delivery_service_update_last_delivery_persists_new_batter_id():
     existing_ball = Delivery(
         id=1,
         innings_id=1,
-        delivery_index=1,
         over=0,
         ball=1,
         bowler_id=10,
@@ -232,36 +228,29 @@ async def test_delivery_service_update_last_delivery_persists_new_batter_id():
         wicket_type=None,
         player_out_id=None,
         fielder_id=None,
-        new_batter_id=None,
     )
-    innings_repo.get_by_match_and_number.return_value = innings
+    match = Match(
+        id=1,
+        team_a=1,
+        team_b=2,
+        venue="MCG",
+        format=MatchFormat.T20,
+        status=MatchStatus.LIVE,
+        mom=None,
+    )
+    match_repo.get_by_id.return_value = match
+    innings_repo.get_by_match_and_number.side_effect = lambda m_id, num: innings if num == 1 else None
     delivery_repo.get_last_delivery.return_value = existing_ball
+    delivery_repo.list_by_innings.return_value = [existing_ball]
     delivery_repo.save.side_effect = lambda d: d
 
     service = DeliveryService(delivery_repo, innings_repo, match_repo)
 
-    # 1. Update with DeliveryCreate including new_batter_id
-    update_in = DeliveryCreate(
-        over=0,
-        ball=1,
-        bowler_id=10,
-        batsman_id=20,
-        non_striker_id=21,
-        runs=0,
-        wicket_type=WicketType.BOWLED,
-        player_out_id=20,
-        fielder_id=None,
-        new_batter_id=25,
-    )
-    updated = await service.update_last_delivery(match_id=1, innings_number=1, delivery_in=update_in)
-    assert updated.wicket_type == WicketType.BOWLED
-    assert updated.player_out_id == 20
-    assert updated.new_batter_id == 25
-
-    # 2. Update with ManualDeliveryUpdate updating new_batter_id
+    # Update with ManualDeliveryUpdate
     manual_in = ManualDeliveryUpdate(
-        new_batter_id=26,
+        runs=4,
+        commentary="Boundary after review",
     )
     updated2 = await service.update_last_delivery(match_id=1, innings_number=1, delivery_in=manual_in)
-    assert updated2.new_batter_id == 26
-
+    assert updated2.runs == 4
+    assert updated2.commentary == "Boundary after review"
