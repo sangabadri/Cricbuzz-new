@@ -4,6 +4,7 @@ from app.database import get_db
 from app.domain.exceptions import EntityNotFoundError, RuleViolationError
 from app.models.squad import Squad
 from app.repositories.match import MatchRepository
+from app.repositories.player import PlayerRepository
 from app.repositories.squad import SquadRepository
 from app.schemas.squad import SquadCreate
 
@@ -14,9 +15,29 @@ class SquadService:
     Decoupled from HTTP frameworks; raises domain exceptions.
     """
 
-    def __init__(self, squad_repo: SquadRepository, match_repo: MatchRepository):
+    def __init__(
+        self,
+        squad_repo: SquadRepository,
+        match_repo: MatchRepository,
+        player_repo: PlayerRepository | None = None,
+    ):
         self.squad_repo = squad_repo
         self.match_repo = match_repo
+        self.player_repo = player_repo
+
+    async def _enrich_player_details(self, squad: Squad | None) -> None:
+        if not self.player_repo or not squad or not getattr(squad, "players", None):
+            return
+        pids = [p.player_id for p in squad.players if getattr(p, "player_id", None)]
+        if not pids:
+            return
+        players_map = await self.player_repo.get_by_ids(pids)
+        for p in squad.players:
+            pl = players_map.get(p.player_id)
+            if pl:
+                setattr(p, "player_name", pl.name)
+                role_val = pl.role.value if hasattr(pl.role, "value") else str(pl.role)
+                setattr(p, "role", role_val)
 
     async def create_squad(self, match_id: int, squad_in: SquadCreate) -> Squad:
         """Validates cricket squad rules and saves the squad."""
@@ -78,6 +99,7 @@ class SquadService:
         squad = await self.squad_repo.get_by_match_and_team(match_id, team_id)
         if not squad:
             raise EntityNotFoundError(f"Squad for Team {team_id} in Match {match_id} not found")
+        await self._enrich_player_details(squad)
         return squad
 
 
@@ -85,4 +107,5 @@ async def get_squad_service(session: AsyncSession = Depends(get_db)) -> SquadSer
     """FastAPI dependency for injecting SquadService."""
     squad_repo = SquadRepository(session)
     match_repo = MatchRepository(session)
-    return SquadService(squad_repo, match_repo)
+    player_repo = PlayerRepository(session)
+    return SquadService(squad_repo, match_repo, player_repo)

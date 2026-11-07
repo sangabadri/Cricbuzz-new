@@ -8,7 +8,7 @@ from typing import Any
 from app.domain.crease import CreaseState
 from app.domain.exceptions import CreaseViolationError, OverProgressionError, RuleViolationError
 from app.domain.rules.formats import MatchFormatRules, get_format_rules
-from app.domain.enums import ExtraType, InningsStatus, MatchFormat, WicketType
+from app.domain.enums import ExtraType, InningsStatus, WicketType
 
 
 class InningsAggregate:

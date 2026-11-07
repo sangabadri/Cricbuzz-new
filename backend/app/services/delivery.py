@@ -8,7 +8,6 @@ from app.domain.exceptions import (
     RuleViolationError,
 )
 from app.domain.innings_aggregate import InningsAggregate
-from app.domain.rules.formats import get_format_rules
 from app.models.delivery import Delivery
 from app.models.innings import Innings
 from app.repositories.delivery import DeliveryRepository

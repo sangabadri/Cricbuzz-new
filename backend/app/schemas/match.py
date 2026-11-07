@@ -27,6 +27,8 @@ class MatchResponse(MatchCreate):
     """Schema for returning match details."""
     id: int
     status: MatchStatus
+    team_a_name: str | None = None
+    team_b_name: str | None = None
     toss_winner: int | None = None
     toss_decision: TossDecision | None = None
     winner: int | None = None

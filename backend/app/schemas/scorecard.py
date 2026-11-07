@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 from app.schemas.enums import ExtraType, InningsStatus, MatchFormat, MatchStatus, TossDecision, WicketType
 
 
@@ -68,6 +68,21 @@ class Partnership(BaseModel):
     balls: int
     overs: OversRecord
     batters: list[PartnershipBatter]
+
+    @computed_field
+    @property
+    def total_runs(self) -> int:
+        return self.runs
+
+    @computed_field
+    @property
+    def batter_1(self) -> PartnershipBatter | None:
+        return self.batters[0] if len(self.batters) > 0 else None
+
+    @computed_field
+    @property
+    def batter_2(self) -> PartnershipBatter | None:
+        return self.batters[1] if len(self.batters) > 1 else None
 
 
 class ExtrasBreakdown(BaseModel):

@@ -5,6 +5,8 @@ class SquadPlayerItem(BaseModel):
     """A player inside a squad."""
     player_id: int
     is_playing_xi: bool = Field(default=True, description="True if player is in the active Playing XI")
+    player_name: str | None = None
+    role: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

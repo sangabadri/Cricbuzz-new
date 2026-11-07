@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.database import engine
 from app.domain.exceptions import (
@@ -37,6 +38,16 @@ app = FastAPI(
     description="Cricket scoring and tracking backend",
     version="1.0.0",
     lifespan=lifespan,
+)
+
+
+# Enable CORS for local and web development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 

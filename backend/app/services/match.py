@@ -30,6 +30,29 @@ class MatchService:
         self.squad_repo = squad_repo
         self.innings_repo = innings_repo
 
+    async def _enrich_team_names(self, matches: list[Match]) -> None:
+        """Helper to populate team_a_name and team_b_name on match objects."""
+        if not self.team_repo or not matches:
+            return
+        try:
+            team_ids = {m.team_a for m in matches if getattr(m, "team_a", None)} | {
+                m.team_b for m in matches if getattr(m, "team_b", None)
+            }
+            if not team_ids:
+                return
+            teams_map = await self.team_repo.get_by_ids(team_ids)
+            if not isinstance(teams_map, dict):
+                return
+            for m in matches:
+                t_a = teams_map.get(m.team_a)
+                t_b = teams_map.get(m.team_b)
+                if t_a and hasattr(t_a, "name") and isinstance(t_a.name, str):
+                    setattr(m, "team_a_name", t_a.name)
+                if t_b and hasattr(t_b, "name") and isinstance(t_b.name, str):
+                    setattr(m, "team_b_name", t_b.name)
+        except Exception:
+            return
+
     async def create_match(self, match_in: MatchCreate) -> Match:
         """Schedules a new match between two distinct, existing teams."""
         # Rule 1: A team cannot play against itself
@@ -46,13 +69,19 @@ class MatchService:
         if not team_b:
             raise EntityNotFoundError(f"Team with ID {match_in.team_b} does not exist")
 
-        return await self.match_repo.create(match_in)
+        match = await self.match_repo.create(match_in)
+        if team_a and hasattr(team_a, "name") and isinstance(team_a.name, str):
+            setattr(match, "team_a_name", team_a.name)
+        if team_b and hasattr(team_b, "name") and isinstance(team_b.name, str):
+            setattr(match, "team_b_name", team_b.name)
+        return match
 
     async def get_match(self, match_id: int) -> Match:
         """Retrieves a match by ID, raising EntityNotFoundError if not found."""
         match = await self.match_repo.get_by_id(match_id)
         if not match:
             raise EntityNotFoundError(f"Match with ID {match_id} not found")
+        await self._enrich_team_names([match])
         return match
 
     async def list_matches(
@@ -63,9 +92,11 @@ class MatchService:
         offset: int = 0,
     ) -> list[Match]:
         """Lists matches with optional status and team filtering."""
-        return await self.match_repo.list_all(
+        matches = await self.match_repo.list_all(
             status=status, team_id=team_id, limit=limit, offset=offset
         )
+        await self._enrich_team_names(matches)
+        return matches
 
     async def conduct_toss(self, match_id: int, toss: MatchToss) -> Match:
         """Conducts the coin toss for a scheduled match and auto-creates Innings 1."""
