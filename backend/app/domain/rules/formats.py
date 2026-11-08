@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
 from app.domain.enums import MatchFormat
+from app.domain.exceptions import RuleViolationError
 
 
 class MatchFormatRules(ABC):
     """
-    Strategy interface for cricket match format rules (T20, ODI, Test).
+    Strategy interface for cricket match format rules (T20, ODI).
     Adheres to Open/Closed Principle: new formats can be added without modifying existing logic.
     """
 
@@ -82,36 +83,14 @@ class ODIFormatRules(MatchFormatRules):
         return 10
 
 
-class TestFormatRules(MatchFormatRules):
-    """Rules strategy for Test / Multi-day cricket."""
-
-    @property
-    def name(self) -> str:
-        return "test"
-
-    @property
-    def max_overs(self) -> int:
-        return 450
-
-    @property
-    def max_bowler_overs(self) -> int:
-        # Unlimited bowler overs in test cricket
-        return 100
-
-    @property
-    def total_innings(self) -> int:
-        return 4
-
-
 def get_format_rules(match_format: MatchFormat | str) -> MatchFormatRules:
     """Factory function returning the corresponding MatchFormatRules strategy."""
     format_value = match_format.value if isinstance(match_format, MatchFormat) else str(match_format).lower()
-    if format_value == MatchFormat.T20.value or format_value == "t20":
+    if format_value in (MatchFormat.T20.value, "t20"):
         return T20FormatRules()
-    elif format_value == MatchFormat.ODI.value or format_value == "odi":
+    elif format_value in (MatchFormat.ODI.value, "odi"):
         return ODIFormatRules()
-    elif format_value == "test":
-        return TestFormatRules()
     else:
-        # Default fallback to T20
-        return T20FormatRules()
+        raise RuleViolationError(
+            f"Unsupported match format: '{match_format}'. Supported formats are 't20' and 'odi'."
+        )

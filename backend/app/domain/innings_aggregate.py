@@ -124,19 +124,72 @@ class InningsAggregate:
         if extra_type is None and extras != 0:
             raise RuleViolationError("Extras must be 0 when extra_type is None")
 
-    def validate_dismissal_rules(
-        self,
+    @classmethod
+    def validate_delivery_state(
+        cls,
+        runs: int,
+        extra_type: ExtraType | None,
+        extras: int,
         wicket_type: WicketType | None,
         player_out_id: int | None,
-        bowler_id: int,
         fielder_id: int | None,
         striker_id: int | None = None,
         non_striker_id: int | None = None,
+        bowler_id: int | None = None,
+        wicket_keeper_id: int | None = None,
     ) -> None:
-        """Validates cricket rules for wickets, dismissals, and fielders."""
-        effective_striker = striker_id if striker_id is not None else (self.crease.striker_id if hasattr(self, "crease") else None)
-        effective_non_striker = non_striker_id if non_striker_id is not None else (self.crease.non_striker_id if hasattr(self, "crease") else None)
+        """
+        Validates the complete delivery state against cricket laws.
+        Enforces constraints between runs, extras, extra types, dismissals, and fielders.
+        """
+        if not (0 <= runs <= 6):
+            raise RuleViolationError("Runs must be between 0 and 6")
 
+        cls.validate_extras_rules(extra_type, extras)
+
+        # Runs off bat dependencies
+        if extra_type == ExtraType.WIDE and runs > 0:
+            raise RuleViolationError("Runs off the bat cannot be scored on a wide")
+        if extra_type in (ExtraType.BYE, ExtraType.LEGBYE) and runs > 0:
+            raise RuleViolationError(f"Runs off the bat cannot be scored for {extra_type.value}")
+
+        # Extra type and dismissal legality
+        if extra_type == ExtraType.WIDE and wicket_type in (
+            WicketType.BOWLED,
+            WicketType.LBW,
+            WicketType.CAUGHT,
+        ):
+            raise RuleViolationError(f"A batsman cannot be dismissed {wicket_type.value} off a wide")
+
+        if extra_type == ExtraType.NOBALL and wicket_type in (
+            WicketType.BOWLED,
+            WicketType.LBW,
+            WicketType.CAUGHT,
+            WicketType.STUMPED,
+            WicketType.HIT_WICKET,
+        ):
+            raise RuleViolationError(f"A batsman cannot be dismissed {wicket_type.value} off a no-ball")
+
+        if extra_type in (ExtraType.BYE, ExtraType.LEGBYE) and wicket_type in (
+            WicketType.BOWLED,
+            WicketType.LBW,
+            WicketType.CAUGHT,
+            WicketType.STUMPED,
+            WicketType.HIT_WICKET,
+        ):
+            raise RuleViolationError(f"A batsman cannot be dismissed {wicket_type.value} on {extra_type.value}")
+
+        # Crease & Bowler participants legality
+        if striker_id is not None and non_striker_id is not None and striker_id == non_striker_id:
+            raise CreaseViolationError("Striker and non-striker cannot be the same player")
+
+        if bowler_id is not None:
+            if striker_id is not None and bowler_id == striker_id:
+                raise RuleViolationError(f"Bowler ({bowler_id}) cannot be an active batter")
+            if non_striker_id is not None and bowler_id == non_striker_id:
+                raise RuleViolationError(f"Bowler ({bowler_id}) cannot be an active batter")
+
+        # Dismissal & fielder rules
         if wicket_type is None:
             if player_out_id is not None:
                 raise RuleViolationError("player_out_id must be None when no wicket occurs")
@@ -147,20 +200,70 @@ class InningsAggregate:
         if player_out_id is None:
             raise RuleViolationError("player_out_id is required when a wicket occurs")
 
-        if effective_striker is not None and effective_non_striker is not None:
-            if player_out_id not in (effective_striker, effective_non_striker):
+        if bowler_id is not None and player_out_id == bowler_id:
+            raise RuleViolationError("Bowler cannot be the dismissed player")
+
+        if wicket_type != WicketType.RUN_OUT and striker_id is not None and player_out_id != striker_id:
+            raise CreaseViolationError(
+                f"Only the striker ({striker_id}) can be dismissed for {wicket_type.value}"
+            )
+
+        if striker_id is not None and non_striker_id is not None:
+            if player_out_id not in (striker_id, non_striker_id):
                 raise CreaseViolationError(
-                    f"player_out_id {player_out_id} must be either the striker ({effective_striker}) "
-                    f"or non-striker ({effective_non_striker})"
+                    f"player_out_id {player_out_id} must be either the striker ({striker_id}) "
+                    f"or non-striker ({non_striker_id})"
                 )
 
-        if wicket_type == WicketType.CAUGHT:
+        if wicket_type == WicketType.STUMPED:
             if fielder_id is None:
-                raise RuleViolationError("fielder_id is required for caught dismissals")
+                raise RuleViolationError("fielder_id is required for stumped dismissals")
+            if bowler_id is not None and fielder_id == bowler_id:
+                raise RuleViolationError("Bowler cannot execute a stumping")
+            if wicket_keeper_id is not None and fielder_id != wicket_keeper_id:
+                raise RuleViolationError(
+                    f"Only the designated wicket-keeper ({wicket_keeper_id}) can execute a stumping"
+                )
 
-        if wicket_type in (WicketType.BOWLED, WicketType.LBW, WicketType.HIT_WICKET):
-            if fielder_id is not None:
-                raise RuleViolationError(f"fielder_id must be None for {wicket_type.value} dismissals")
+        if wicket_type == WicketType.CAUGHT and fielder_id is None:
+            raise RuleViolationError("fielder_id is required for caught dismissals")
+
+        if fielder_id is not None:
+            if player_out_id is not None and fielder_id == player_out_id:
+                raise RuleViolationError(f"Fielder cannot be the dismissed batter for {wicket_type.value}")
+            if striker_id is not None and fielder_id == striker_id:
+                raise RuleViolationError(f"Fielder cannot be an active batter ({striker_id}) for {wicket_type.value}")
+            if non_striker_id is not None and fielder_id == non_striker_id:
+                raise RuleViolationError(f"Fielder cannot be an active batter ({non_striker_id}) for {wicket_type.value}")
+
+        if wicket_type in (WicketType.BOWLED, WicketType.LBW, WicketType.HIT_WICKET) and fielder_id is not None:
+            raise RuleViolationError(f"fielder_id must be None for {wicket_type.value} dismissals")
+
+    def validate_dismissal_rules(
+        self,
+        wicket_type: WicketType | None,
+        player_out_id: int | None,
+        bowler_id: int,
+        fielder_id: int | None,
+        striker_id: int | None = None,
+        non_striker_id: int | None = None,
+        wicket_keeper_id: int | None = None,
+    ) -> None:
+        """Validates cricket rules for wickets, dismissals, and fielders."""
+        effective_striker = striker_id if striker_id is not None else (self.crease.striker_id if hasattr(self, "crease") else None)
+        effective_non_striker = non_striker_id if non_striker_id is not None else (self.crease.non_striker_id if hasattr(self, "crease") else None)
+        self.validate_delivery_state(
+            runs=0,
+            extra_type=None,
+            extras=0,
+            wicket_type=wicket_type,
+            player_out_id=player_out_id,
+            fielder_id=fielder_id,
+            striker_id=effective_striker,
+            non_striker_id=effective_non_striker,
+            bowler_id=bowler_id,
+            wicket_keeper_id=wicket_keeper_id,
+        )
 
     def record_ball(
         self,
@@ -175,6 +278,7 @@ class InningsAggregate:
         commentary: str | None = None,
         explicit_striker_id: int | None = None,
         explicit_non_striker_id: int | None = None,
+        wicket_keeper_id: int | None = None,
     ) -> dict[str, Any]:
         """
         Processes a single ball bowled in the innings.
@@ -201,12 +305,7 @@ class InningsAggregate:
         if self.crease.striker_id is None or self.crease.non_striker_id is None:
             raise CreaseViolationError("Striker and non-striker must be established on the crease")
 
-        # 1. Validate basic delivery values and extras
-        if not (0 <= runs <= 6):
-            raise RuleViolationError("Runs must be between 0 and 6")
-        self.validate_extras_rules(extra_type, extras)
-
-        # 2. Determine and validate bowler
+        # 1. Determine and validate bowler
         if bowler_id is None:
             if self.current_bowler_id is None:
                 raise OverProgressionError("No bowler assigned for this over. Set bowler first.")
@@ -216,7 +315,7 @@ class InningsAggregate:
             if self.current_bowler_id is None:
                 self.current_bowler_id = bowler_id
 
-        # 3. Auto-derive player_out_id for non-runout dismissals if omitted
+        # 2. Auto-derive player_out_id for non-runout dismissals if omitted
         if wicket_type is not None:
             if player_out_id is None:
                 if wicket_type != WicketType.RUN_OUT:
@@ -228,8 +327,19 @@ class InningsAggregate:
                     f"Only the striker ({self.crease.striker_id}) can be dismissed for {wicket_type.value}"
                 )
 
-        # Validate dismissal & fielder rules
-        self.validate_dismissal_rules(wicket_type, player_out_id, bowler_id, fielder_id)
+        # 3. Validate complete delivery state
+        self.validate_delivery_state(
+            runs=runs,
+            extra_type=extra_type,
+            extras=extras,
+            wicket_type=wicket_type,
+            player_out_id=player_out_id,
+            fielder_id=fielder_id,
+            striker_id=self.crease.striker_id,
+            non_striker_id=self.crease.non_striker_id,
+            bowler_id=bowler_id,
+            wicket_keeper_id=wicket_keeper_id,
+        )
 
         # 4. Determine ball characteristics & sequential attempt
         is_legal = extra_type not in (ExtraType.WIDE, ExtraType.NOBALL)

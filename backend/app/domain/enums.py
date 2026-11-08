@@ -6,24 +6,21 @@ class MatchFormat(str, Enum):
     ODI = "odi"
 
     @property
+    def rules(self):
+        from app.domain.rules.formats import get_format_rules
+        return get_format_rules(self)
+
+    @property
     def max_overs(self) -> int:
-        match self:
-            case MatchFormat.T20:
-                return 20
-            case MatchFormat.ODI:
-                return 50
+        return self.rules.max_overs
 
     @property
     def max_bowler_overs(self) -> int:
-        match self:
-            case MatchFormat.T20:
-                return 4
-            case MatchFormat.ODI:
-                return 10
+        return self.rules.max_bowler_overs
 
     @property
     def total_innings(self) -> int:
-        return 2
+        return self.rules.total_innings
 
 
 class MatchStatus(str, Enum):

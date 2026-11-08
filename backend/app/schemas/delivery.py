@@ -41,6 +41,8 @@ class ManualDeliveryUpdate(BaseModel):
     fielder_id: int | None = Field(default=None, description="Updated fielder")
     commentary: str | None = Field(default=None, description="Updated commentary text")
 
+    model_config = ConfigDict(extra="forbid")
+
 
 class DeliveryResponse(BaseModel):
     """Schema for returning delivery information."""
