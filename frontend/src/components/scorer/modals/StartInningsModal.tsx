@@ -1,39 +1,78 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { PlayCircle } from 'lucide-react';
 import type { SquadResponse } from '../../../types/cricket';
+
+export interface StartInningsPayload {
+  strikerId: number;
+  nonStrikerId: number;
+  bowlerId: number;
+}
 
 export interface StartInningsModalProps {
   isOpen: boolean;
   inningsNumber: number;
   onClose: () => void;
-  onSubmit: () => void;
-  strikerId: number | undefined;
-  onStrikerChange: (id: number | undefined) => void;
-  nonStrikerId: number | undefined;
-  onNonStrikerChange: (id: number | undefined) => void;
-  bowlerId: number | undefined;
-  onBowlerChange: (id: number | undefined) => void;
+  onSubmit: (data?: StartInningsPayload) => void;
+  strikerId?: number | undefined;
+  onStrikerChange?: (id: number | undefined) => void;
+  nonStrikerId?: number | undefined;
+  onNonStrikerChange?: (id: number | undefined) => void;
+  bowlerId?: number | undefined;
+  onBowlerChange?: (id: number | undefined) => void;
   battingSquad?: SquadResponse;
   bowlingSquad?: SquadResponse;
   isPending?: boolean;
 }
 
-export const StartInningsModal: React.FC<StartInningsModalProps> = ({
-  isOpen,
+const StartInningsModalContent: React.FC<Omit<StartInningsModalProps, 'isOpen'>> = ({
   inningsNumber,
   onClose,
   onSubmit,
-  strikerId,
+  strikerId: strikerIdProp,
   onStrikerChange,
-  nonStrikerId,
+  nonStrikerId: nonStrikerIdProp,
   onNonStrikerChange,
-  bowlerId,
+  bowlerId: bowlerIdProp,
   onBowlerChange,
   battingSquad,
   bowlingSquad,
   isPending = false,
 }) => {
-  if (!isOpen) return null;
+  // Encapsulated internal form state - initialized on modal open
+  const [internalStrikerId, setInternalStrikerId] = useState<number | undefined>(strikerIdProp);
+  const [internalNonStrikerId, setInternalNonStrikerId] = useState<number | undefined>(nonStrikerIdProp);
+  const [internalBowlerId, setInternalBowlerId] = useState<number | undefined>(bowlerIdProp);
+
+  const strikerId = strikerIdProp !== undefined ? strikerIdProp : internalStrikerId;
+  const nonStrikerId = nonStrikerIdProp !== undefined ? nonStrikerIdProp : internalNonStrikerId;
+  const bowlerId = bowlerIdProp !== undefined ? bowlerIdProp : internalBowlerId;
+
+  const handleStrikerChange = (id: number | undefined) => {
+    setInternalStrikerId(id);
+    onStrikerChange?.(id);
+  };
+
+  const handleNonStrikerChange = (id: number | undefined) => {
+    setInternalNonStrikerId(id);
+    onNonStrikerChange?.(id);
+  };
+
+  const handleBowlerChange = (id: number | undefined) => {
+    setInternalBowlerId(id);
+    onBowlerChange?.(id);
+  };
+
+  const handleSubmit = () => {
+    if (strikerId && nonStrikerId && bowlerId) {
+      onSubmit({
+        strikerId,
+        nonStrikerId,
+        bowlerId,
+      });
+    } else {
+      onSubmit();
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
@@ -58,7 +97,7 @@ export const StartInningsModal: React.FC<StartInningsModalProps> = ({
             </label>
             <select
               value={strikerId || ''}
-              onChange={(e) => onStrikerChange(e.target.value ? Number(e.target.value) : undefined)}
+              onChange={(e) => handleStrikerChange(e.target.value ? Number(e.target.value) : undefined)}
               className="w-full bg-[#12161f] border border-[#21262d] rounded-xl px-3 py-2 text-xs text-white font-bold"
             >
               <option value="">Select Striker</option>
@@ -77,7 +116,7 @@ export const StartInningsModal: React.FC<StartInningsModalProps> = ({
             <select
               value={nonStrikerId || ''}
               onChange={(e) =>
-                onNonStrikerChange(e.target.value ? Number(e.target.value) : undefined)
+                handleNonStrikerChange(e.target.value ? Number(e.target.value) : undefined)
               }
               className="w-full bg-[#12161f] border border-[#21262d] rounded-xl px-3 py-2 text-xs text-white font-bold"
             >
@@ -98,7 +137,7 @@ export const StartInningsModal: React.FC<StartInningsModalProps> = ({
             </label>
             <select
               value={bowlerId || ''}
-              onChange={(e) => onBowlerChange(e.target.value ? Number(e.target.value) : undefined)}
+              onChange={(e) => handleBowlerChange(e.target.value ? Number(e.target.value) : undefined)}
               className="w-full bg-[#12161f] border border-[#21262d] rounded-xl px-3 py-2 text-xs text-white font-bold"
             >
               <option value="">Select Opening Bowler</option>
@@ -119,7 +158,7 @@ export const StartInningsModal: React.FC<StartInningsModalProps> = ({
             Cancel
           </button>
           <button
-            onClick={onSubmit}
+            onClick={handleSubmit}
             disabled={!strikerId || !nonStrikerId || !bowlerId || isPending}
             className="px-5 py-2 bg-[#0070f3] hover:bg-blue-600 text-white rounded-xl text-xs font-black shadow-md border border-blue-400/40 disabled:opacity-50 cursor-pointer"
           >
@@ -129,4 +168,9 @@ export const StartInningsModal: React.FC<StartInningsModalProps> = ({
       </div>
     </div>
   );
+};
+
+export const StartInningsModal: React.FC<StartInningsModalProps> = (props) => {
+  if (!props.isOpen) return null;
+  return <StartInningsModalContent {...props} />;
 };

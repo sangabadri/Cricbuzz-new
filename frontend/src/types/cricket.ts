@@ -55,6 +55,8 @@ export interface Match {
   mom?: number;
 }
 
+export type MatchResponse = Match;
+
 export interface MatchCreateRequest {
   team_a: number;
   team_b: number;
@@ -137,6 +139,7 @@ export interface ExtrasBreakdown {
 }
 
 export interface InningsScorecard {
+  innings_id?: number | null;
   innings_number: number;
   batting_team_id: number;
   batting_team_name: string;
@@ -146,6 +149,9 @@ export interface InningsScorecard {
   runs: number;
   wickets: number;
   overs: OversRecord;
+  current_run_rate?: number;
+  target?: number | null;
+  required_run_rate?: number | null;
   batters: BatterScorecard[];
   bowlers: BowlerScorecard[];
   batting?: BatterScorecard[];
@@ -317,7 +323,7 @@ export interface SquadResponse {
   match_id: number;
   team_id: number;
   captain_id: number;
-  wicket_keeper_id: number;
+  wicket_keeper_id?: number | null;
   players: SquadPlayerItem[];
 }
 
@@ -330,3 +336,27 @@ export interface SeedResponse {
   team_b_name: string;
   innings_number: number;
 }
+
+export interface InningsResponse {
+  id: number;
+  match_id: number;
+  innings_number: number;
+  batting_team_id: number;
+  bowling_team_id: number;
+  status: InningsStatus;
+  target?: number | null;
+  current_striker_id?: number | null;
+  current_non_striker_id?: number | null;
+  current_bowler_id?: number | null;
+}
+
+export interface ManualDeliveryUpdate {
+  runs?: number;
+  extra_type?: ExtraType | null;
+  extras?: number;
+  wicket_type?: WicketType | null;
+  player_out_id?: number | null;
+  fielder_id?: number | null;
+  commentary?: string | null;
+}
+

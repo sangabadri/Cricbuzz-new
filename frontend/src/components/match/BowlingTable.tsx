@@ -12,7 +12,7 @@ export const BowlingTable: React.FC<BowlingTableProps> = ({ bowlers, className =
       <table className="w-full text-left text-xs tabular-nums">
         <thead>
           <tr className="border-b border-[#21262d] bg-[#12161f] text-[10px] font-black uppercase tracking-wider text-slate-400">
-            <th className="py-2.5 px-4 font-bold">Bowler</th>
+            <th className="sticky left-0 bg-[#161b22] z-10 py-2.5 px-4 font-bold">Bowler</th>
             <th className="py-2.5 px-3 text-right">O</th>
             <th className="py-2.5 px-2 text-right">M</th>
             <th className="py-2.5 px-2.5 text-right font-medium">R</th>
@@ -46,7 +46,7 @@ export const BowlingTable: React.FC<BowlingTableProps> = ({ bowlers, className =
                   key={bw.player_id}
                   className="odd:bg-[#161b22] even:bg-[#12161f]/60 hover:bg-[#21262d]/70 transition-colors"
                 >
-                  <td className="py-2.5 px-4 font-bold text-white whitespace-nowrap">
+                  <td className="sticky left-0 bg-[#161b22] z-10 py-2.5 px-4 font-bold text-white whitespace-nowrap">
                     {bw.player_name}
                   </td>
                   <td className="py-2.5 px-3 text-right text-slate-300 font-mono">

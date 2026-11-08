@@ -8,6 +8,7 @@ export interface BowlerModalProps {
   onSelectBowler: (bowlerId: number) => void;
   bowlingSquad?: SquadResponse;
   currentBowlerId?: number | null;
+  eligibleBowlerIds?: number[];
   canClose?: boolean;
   isPending?: boolean;
 }
@@ -18,6 +19,7 @@ export const BowlerModal: React.FC<BowlerModalProps> = ({
   onSelectBowler,
   bowlingSquad,
   currentBowlerId,
+  eligibleBowlerIds,
   canClose = true,
   isPending = false,
 }) => {
@@ -49,15 +51,20 @@ export const BowlerModal: React.FC<BowlerModalProps> = ({
         <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
           {bowlingSquad?.players.map((p) => {
             const isCurrent = p.player_id === currentBowlerId;
+            const isEligible = eligibleBowlerIds
+              ? eligibleBowlerIds.includes(p.player_id)
+              : !isCurrent;
+            const isDisabled = !isEligible || isPending;
+
             return (
               <button
                 key={p.player_id}
                 onClick={() => onSelectBowler(p.player_id)}
-                disabled={isCurrent || isPending}
-                className={`w-full p-3 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
-                  isCurrent
+                disabled={isDisabled}
+                className={`w-full p-3 rounded-xl border text-left flex items-center justify-between transition-all ${
+                  isDisabled
                     ? 'bg-[#12161f] border-[#21262d] opacity-50 cursor-not-allowed'
-                    : 'bg-[#12161f] hover:bg-[#21262d] border-[#21262d] text-white hover:border-[#0070f3]'
+                    : 'bg-[#12161f] hover:bg-[#21262d] border-[#21262d] text-white hover:border-[#0070f3] cursor-pointer'
                 }`}
               >
                 <div>
@@ -68,8 +75,16 @@ export const BowlerModal: React.FC<BowlerModalProps> = ({
                     {p.role || 'Bowler'}
                   </span>
                 </div>
-                {isCurrent && (
-                  <span className="text-[10px] text-amber-400 font-bold">Just Bowled</span>
+                {isCurrent ? (
+                  <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+                    Just Bowled
+                  </span>
+                ) : !isEligible ? (
+                  <span className="text-[10px] text-rose-400 font-bold bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/30">
+                    Over quota / ineligible
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-emerald-400 font-bold">Eligible</span>
                 )}
               </button>
             );

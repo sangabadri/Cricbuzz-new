@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   AlertCircle,
@@ -21,11 +21,14 @@ export const ScorerConsole: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const matchId = Number(id);
 
+  const [momPlayerId, setMomPlayerId] = useState<number | undefined>();
+
   const {
     inningsNumber,
     setInningsNumber,
     match,
     scorerState,
+    liveTicker,
     isStateLoading,
     isStateError,
     refetchState,
@@ -39,23 +42,6 @@ export const ScorerConsole: React.FC = () => {
     showIncomingBatterModal,
     showStartInningsModal,
     setShowStartInningsModal,
-
-    wicketType,
-    setWicketType,
-    fielderId,
-    setFielderId,
-    wicketRuns,
-    setWicketRuns,
-
-    startStrikerId,
-    setStartStrikerId,
-    startNonStrikerId,
-    setStartNonStrikerId,
-    startBowlerId,
-    setStartBowlerId,
-
-    momPlayerId,
-    setMomPlayerId,
 
     handleRuns,
     handleExtra,
@@ -76,49 +62,8 @@ export const ScorerConsole: React.FC = () => {
     isAwardingMOM,
   } = useScorer(matchId);
 
-  // Keyboard shortcut listener for fast physical scoring
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if user is typing in an input, textarea, or select
-      const activeTag = (document.activeElement?.tagName || '').toLowerCase();
-      if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') {
-        return;
-      }
-      // Don't trigger if any modal is open
-      if (
-        showWicketModal ||
-        showBowlerModal ||
-        showIncomingBatterModal ||
-        showStartInningsModal ||
-        isRecordingDelivery
-      ) {
-        return;
-      }
-
-      if (['0', '1', '2', '3', '4', '6'].includes(e.key)) {
-        e.preventDefault();
-        handleRuns(Number(e.key));
-      } else if (e.key === 'w' || e.key === 'W') {
-        e.preventDefault();
-        handleExtra('wide', 1);
-      } else if (e.key === 'n' || e.key === 'N') {
-        e.preventDefault();
-        handleExtra('noball', 1);
-      } else if (e.key === 'k' || e.key === 'K') {
-        e.preventDefault();
-        setShowWicketModal(true);
-      } else if (e.key === 's' || e.key === 'S') {
-        e.preventDefault();
-        handleSwapStrike();
-      } else if (e.key === 'u' || e.key === 'U') {
-        e.preventDefault();
-        handleUndoDelivery();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [
+  // Stable ref for keyboard shortcuts to avoid unbinding/rebinding window listener on every render
+  const keyHandlerRef = useRef({
     showWicketModal,
     showBowlerModal,
     showIncomingBatterModal,
@@ -129,7 +74,85 @@ export const ScorerConsole: React.FC = () => {
     setShowWicketModal,
     handleSwapStrike,
     handleUndoDelivery,
-  ]);
+  });
+
+  useEffect(() => {
+    keyHandlerRef.current = {
+      showWicketModal,
+      showBowlerModal,
+      showIncomingBatterModal,
+      showStartInningsModal,
+      isRecordingDelivery,
+      handleRuns,
+      handleExtra,
+      setShowWicketModal,
+      handleSwapStrike,
+      handleUndoDelivery,
+    };
+  });
+
+  // Keyboard shortcut listener for fast physical scoring - bound once on mount
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input, textarea, or select
+      const activeTag = (document.activeElement?.tagName || '').toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') {
+        return;
+      }
+      const {
+        showWicketModal: isWicketOpen,
+        showBowlerModal: isBowlerOpen,
+        showIncomingBatterModal: isBatterOpen,
+        showStartInningsModal: isInningsOpen,
+        isRecordingDelivery: isRecording,
+        handleRuns: onRuns,
+        handleExtra: onExtra,
+        setShowWicketModal: openWicket,
+        handleSwapStrike: onSwap,
+        handleUndoDelivery: onUndo,
+      } = keyHandlerRef.current;
+
+      // Don't trigger if any modal is open or delivery is being recorded
+      if (
+        isWicketOpen ||
+        isBowlerOpen ||
+        isBatterOpen ||
+        isInningsOpen ||
+        isRecording
+      ) {
+        return;
+      }
+
+      if (['0', '1', '2', '3', '4', '6'].includes(e.key)) {
+        e.preventDefault();
+        onRuns(Number(e.key));
+      } else if (e.key === 'w' || e.key === 'W') {
+        e.preventDefault();
+        onExtra('wide', 1);
+      } else if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault();
+        onExtra('noball', 1);
+      } else if (e.key === 'l' || e.key === 'L') {
+        e.preventDefault();
+        onExtra('leg-bye', 1);
+      } else if (e.key === 'b' || e.key === 'B') {
+        e.preventDefault();
+        onExtra('bye', 1);
+      } else if (e.key === 'k' || e.key === 'K') {
+        e.preventDefault();
+        openWicket(true);
+      } else if (e.key === 's' || e.key === 'S') {
+        e.preventDefault();
+        onSwap();
+      } else if (e.key === 'u' || e.key === 'U') {
+        e.preventDefault();
+        onUndo();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   if (isStateLoading && !scorerState) {
     return (
@@ -321,6 +344,7 @@ export const ScorerConsole: React.FC = () => {
         <div className="space-y-6">
           <CreaseHud
             scorerState={scorerState}
+            liveTicker={liveTicker}
             onSwapStrike={handleSwapStrike}
             onChangeBowler={() => setShowBowlerModal(true)}
             onUndoBall={handleUndoDelivery}
@@ -347,12 +371,10 @@ export const ScorerConsole: React.FC = () => {
         isOpen={showWicketModal}
         onClose={() => setShowWicketModal(false)}
         onConfirm={handleWicketSubmit}
-        wicketType={wicketType}
-        onWicketTypeChange={setWicketType}
-        fielderId={fielderId}
-        onFielderChange={setFielderId}
-        wicketRuns={wicketRuns}
-        onWicketRunsChange={setWicketRuns}
+        strikerId={scorerState?.striker_id}
+        strikerName={scorerState?.striker_name}
+        nonStrikerId={scorerState?.non_striker_id}
+        nonStrikerName={scorerState?.non_striker_name}
         bowlingSquad={bowlingSquad}
         isPending={isRecordingDelivery}
       />
@@ -364,6 +386,7 @@ export const ScorerConsole: React.FC = () => {
         onSelectBowler={handleSetBowler}
         bowlingSquad={bowlingSquad}
         currentBowlerId={scorerState?.current_bowler_id}
+        eligibleBowlerIds={scorerState?.eligible_bowler_ids}
         isPending={isSettingBowler}
       />
 
@@ -385,12 +408,6 @@ export const ScorerConsole: React.FC = () => {
         inningsNumber={inningsNumber}
         battingSquad={battingSquad}
         bowlingSquad={bowlingSquad}
-        strikerId={startStrikerId}
-        onStrikerChange={setStartStrikerId}
-        nonStrikerId={startNonStrikerId}
-        onNonStrikerChange={setStartNonStrikerId}
-        bowlerId={startBowlerId}
-        onBowlerChange={setStartBowlerId}
         isPending={isStartingInnings}
       />
     </div>

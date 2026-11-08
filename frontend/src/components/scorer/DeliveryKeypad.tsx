@@ -1,11 +1,11 @@
-import React from 'react';
-import { ArrowLeftRight, RotateCcw, Skull } from 'lucide-react';
+import React, { useState } from 'react';
+import { ArrowLeftRight, RotateCcw, Skull, X } from 'lucide-react';
 import type { ExtraType, LiveCurrentOverBall } from '../../types/cricket';
 import { BallBubble } from '../common/BallBubble';
 
 export interface DeliveryKeypadProps {
   onRuns: (runs: number) => void;
-  onExtra: (extraType: ExtraType, extrasCount?: number) => void;
+  onExtra: (extraType: ExtraType, extrasCount?: number, runs?: number) => void;
   onOpenWicketModal: () => void;
   disabled?: boolean;
   currentOverBalls?: (LiveCurrentOverBall | string)[];
@@ -26,6 +26,8 @@ export const DeliveryKeypad: React.FC<DeliveryKeypadProps> = ({
   isUndoing = false,
   isSwappingStrike = false,
 }) => {
+  const [selectedModifier, setSelectedModifier] = useState<ExtraType | null>(null);
+
   // Count legal balls in current over to show 6 slots
   const legalBallsCount = currentOverBalls.filter((b) => {
     if (typeof b === 'object' && b !== null) {
@@ -34,6 +36,78 @@ export const DeliveryKeypad: React.FC<DeliveryKeypadProps> = ({
     const s = String(b);
     return !s.includes('Wd') && !s.includes('Nb');
   }).length;
+
+  const handleModifierClick = (extraType: ExtraType) => {
+    if (disabled) return;
+    if (selectedModifier === extraType) {
+      // Direct 1-click fallback: Clicking the already selected extra submits standard +1
+      submitSingleExtra(extraType);
+    } else {
+      setSelectedModifier(extraType);
+    }
+  };
+
+  const submitSingleExtra = (extraType: ExtraType) => {
+    if (disabled) return;
+    onExtra(extraType, 1, 0);
+    setSelectedModifier(null);
+  };
+
+  const handleRunClick = (run: number) => {
+    if (disabled) return;
+    if (!selectedModifier) {
+      onRuns(run);
+      return;
+    }
+
+    if (selectedModifier === 'noball') {
+      // No ball: 1 noball penalty extra + runs scored off the bat
+      onExtra('noball', 1, run);
+    } else if (selectedModifier === 'wide') {
+      // Wide: 1 wide penalty extra + additional byes/overthrows
+      onExtra('wide', 1 + run, 0);
+    } else if (selectedModifier === 'bye') {
+      // Bye: total runs completed as byes
+      onExtra('bye', run === 0 ? 1 : run, 0);
+    } else if (selectedModifier === 'leg-bye') {
+      // Leg Bye: total runs completed as leg-byes
+      onExtra('leg-bye', run === 0 ? 1 : run, 0);
+    }
+
+    setSelectedModifier(null);
+  };
+
+  const getRunLabel = (run: number) => {
+    if (!selectedModifier) {
+      return run === 0 ? 'Dot' : run === 4 ? 'Boundary' : run === 6 ? 'Maximum' : 'Runs';
+    }
+    if (selectedModifier === 'noball') {
+      return run === 0 ? '+1 Nb' : `+${1 + run} (${run} bat)`;
+    }
+    if (selectedModifier === 'wide') {
+      return run === 0 ? '+1 Wide' : `+${1 + run} Wides`;
+    }
+    if (selectedModifier === 'bye') {
+      return run === 0 || run === 1 ? '+1 Bye' : `+${run} Byes`;
+    }
+    if (selectedModifier === 'leg-bye') {
+      return run === 0 || run === 1 ? '+1 Leg Bye' : `+${run} L-Byes`;
+    }
+    return 'Runs';
+  };
+
+  const getExtraName = (extra: ExtraType) => {
+    switch (extra) {
+      case 'noball':
+        return 'No Ball';
+      case 'wide':
+        return 'Wide';
+      case 'bye':
+        return 'Bye';
+      case 'leg-bye':
+        return 'Leg Bye';
+    }
+  };
 
   return (
     <div className="bg-[#161b22] border border-[#21262d] rounded-2xl p-5 lg:p-6 shadow-xl space-y-5">
@@ -89,15 +163,56 @@ export const DeliveryKeypad: React.FC<DeliveryKeypadProps> = ({
         </div>
       </div>
 
+      {/* Active Compound Extra Notification Banner */}
+      {selectedModifier && (
+        <div className="flex items-center justify-between p-3 rounded-xl bg-amber-500/15 border border-amber-500/40 text-xs animate-in fade-in duration-200">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <span className="font-bold text-amber-300">
+              Compound Modifier: <span className="uppercase font-black text-white">{getExtraName(selectedModifier)}</span> active.
+            </span>
+            <span className="text-slate-400 text-[11px] hidden sm:inline">
+              {selectedModifier === 'noball'
+                ? 'Select runs scored off the bat (0-6)'
+                : selectedModifier === 'wide'
+                ? 'Select 0 for 1 wide, or 1-6 for additional wides/byes'
+                : 'Select runs completed (1-6)'}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => submitSingleExtra(selectedModifier)}
+              className="px-2.5 py-1 rounded-md bg-amber-500 hover:bg-amber-400 active:scale-95 text-black font-black text-[11px] transition-all cursor-pointer disabled:opacity-50"
+            >
+              Quick +1 {getExtraName(selectedModifier)}
+            </button>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => setSelectedModifier(null)}
+              className="p-1 rounded-md bg-[#21262d] hover:bg-[#30363d] text-slate-300 transition-colors cursor-pointer disabled:opacity-50"
+              title="Cancel compound modifier"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Numerical Run Action Buttons (0-6) */}
       <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5">
         {[0, 1, 2, 3, 4, 6].map((run) => (
           <button
             key={run}
-            onClick={() => onRuns(run)}
+            onClick={() => handleRunClick(run)}
             disabled={disabled}
             className={`h-20 rounded-xl flex flex-col items-center justify-center border transition-all active:scale-95 disabled:opacity-40 cursor-pointer ${
-              run === 0
+              selectedModifier
+                ? 'bg-amber-500/10 hover:bg-amber-500/20 text-white border-amber-500/40 shadow-sm'
+                : run === 0
                 ? 'bg-[#12161f] hover:bg-[#21262d] text-slate-200 border-[#21262d] shadow-sm'
                 : run === 4
                 ? 'bg-[#0284c7] hover:bg-sky-500 text-white border-[#38bdf8] shadow-md shadow-sky-950/40 ring-1 ring-[#0284c7]/40'
@@ -106,9 +221,17 @@ export const DeliveryKeypad: React.FC<DeliveryKeypadProps> = ({
                 : 'bg-[#21262d] hover:bg-[#30363d] text-white border-[#30363d]'
             }`}
           >
-            <span className="font-score text-3xl lg:text-4xl font-black tabular-nums leading-none">{run}</span>
+            <span className="font-score text-3xl lg:text-4xl font-black tabular-nums leading-none">
+              {selectedModifier && selectedModifier === 'noball'
+                ? 1 + run
+                : selectedModifier && selectedModifier === 'wide'
+                ? 1 + run
+                : selectedModifier && (selectedModifier === 'bye' || selectedModifier === 'leg-bye')
+                ? (run === 0 ? 1 : run)
+                : run}
+            </span>
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300 mt-1 opacity-80">
-              {run === 0 ? 'Dot' : run === 4 ? 'Boundary' : run === 6 ? 'Maximum' : 'Runs'}
+              {getRunLabel(run)}
             </span>
             <span className="text-[9px] font-mono text-slate-400 mt-0.5 opacity-60">
               [{run}]
@@ -119,42 +242,71 @@ export const DeliveryKeypad: React.FC<DeliveryKeypadProps> = ({
 
       {/* Extras & Wicket Controls */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-1">
+        {/* Wide Button */}
         <button
-          onClick={() => onExtra('wide', 1)}
+          onClick={() => handleModifierClick('wide')}
           disabled={disabled}
-          className="py-3 px-3 rounded-xl bg-amber-600/15 hover:bg-amber-600/25 active:scale-95 text-amber-300 border border-amber-500/40 text-xs font-black uppercase tracking-wider transition-all disabled:opacity-40 cursor-pointer flex flex-col items-center justify-center gap-0.5"
+          className={`py-3 px-3 rounded-xl active:scale-95 text-xs font-black uppercase tracking-wider transition-all disabled:opacity-40 cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
+            selectedModifier === 'wide'
+              ? 'bg-amber-500/30 text-amber-200 border-2 border-amber-400 ring-2 ring-amber-400/50 shadow-md'
+              : 'bg-amber-600/15 hover:bg-amber-600/25 text-amber-300 border border-amber-500/40'
+          }`}
         >
-          <span>+1 Wide</span>
-          <span className="text-[9px] font-mono text-amber-400/70">[W]</span>
+          <span>{selectedModifier === 'wide' ? '✓ Wide Active' : '+1 Wide'}</span>
+          <span className="text-[9px] font-mono text-amber-400/70">
+            {selectedModifier === 'wide' ? '[Click again: +1]' : '[W]'}
+          </span>
         </button>
 
+        {/* No Ball Button */}
         <button
-          onClick={() => onExtra('noball', 1)}
+          onClick={() => handleModifierClick('noball')}
           disabled={disabled}
-          className="py-3 px-3 rounded-xl bg-amber-600/15 hover:bg-amber-600/25 active:scale-95 text-amber-300 border border-amber-500/40 text-xs font-black uppercase tracking-wider transition-all disabled:opacity-40 cursor-pointer flex flex-col items-center justify-center gap-0.5"
+          className={`py-3 px-3 rounded-xl active:scale-95 text-xs font-black uppercase tracking-wider transition-all disabled:opacity-40 cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
+            selectedModifier === 'noball'
+              ? 'bg-amber-500/30 text-amber-200 border-2 border-amber-400 ring-2 ring-amber-400/50 shadow-md'
+              : 'bg-amber-600/15 hover:bg-amber-600/25 text-amber-300 border border-amber-500/40'
+          }`}
         >
-          <span>+1 No Ball</span>
-          <span className="text-[9px] font-mono text-amber-400/70">[N]</span>
+          <span>{selectedModifier === 'noball' ? '✓ No Ball Active' : '+1 No Ball'}</span>
+          <span className="text-[9px] font-mono text-amber-400/70">
+            {selectedModifier === 'noball' ? '[Click again: +1]' : '[N]'}
+          </span>
         </button>
 
+        {/* Leg Bye Button */}
         <button
-          onClick={() => onExtra('leg-bye', 1)}
+          onClick={() => handleModifierClick('leg-bye')}
           disabled={disabled}
-          className="py-3 px-3 rounded-xl bg-[#12161f] hover:bg-[#21262d] active:scale-95 text-slate-300 border border-[#21262d] text-xs font-bold uppercase tracking-wider transition-all disabled:opacity-40 cursor-pointer flex flex-col items-center justify-center gap-0.5"
+          className={`py-3 px-3 rounded-xl active:scale-95 text-xs font-bold uppercase tracking-wider transition-all disabled:opacity-40 cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
+            selectedModifier === 'leg-bye'
+              ? 'bg-sky-500/25 text-sky-200 border-2 border-sky-400 ring-2 ring-sky-400/50 shadow-md'
+              : 'bg-[#12161f] hover:bg-[#21262d] text-slate-300 border border-[#21262d]'
+          }`}
         >
-          <span>+1 Leg Bye</span>
-          <span className="text-[9px] font-mono text-slate-500">[L]</span>
+          <span>{selectedModifier === 'leg-bye' ? '✓ Leg Bye Active' : '+1 Leg Bye'}</span>
+          <span className="text-[9px] font-mono text-slate-500">
+            {selectedModifier === 'leg-bye' ? '[Click again: +1]' : '[L]'}
+          </span>
         </button>
 
+        {/* Bye Button */}
         <button
-          onClick={() => onExtra('bye', 1)}
+          onClick={() => handleModifierClick('bye')}
           disabled={disabled}
-          className="py-3 px-3 rounded-xl bg-[#12161f] hover:bg-[#21262d] active:scale-95 text-slate-300 border border-[#21262d] text-xs font-bold uppercase tracking-wider transition-all disabled:opacity-40 cursor-pointer flex flex-col items-center justify-center gap-0.5"
+          className={`py-3 px-3 rounded-xl active:scale-95 text-xs font-bold uppercase tracking-wider transition-all disabled:opacity-40 cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
+            selectedModifier === 'bye'
+              ? 'bg-sky-500/25 text-sky-200 border-2 border-sky-400 ring-2 ring-sky-400/50 shadow-md'
+              : 'bg-[#12161f] hover:bg-[#21262d] text-slate-300 border border-[#21262d]'
+          }`}
         >
-          <span>+1 Bye</span>
-          <span className="text-[9px] font-mono text-slate-500">[B]</span>
+          <span>{selectedModifier === 'bye' ? '✓ Bye Active' : '+1 Bye'}</span>
+          <span className="text-[9px] font-mono text-slate-500">
+            {selectedModifier === 'bye' ? '[Click again: +1]' : '[B]'}
+          </span>
         </button>
 
+        {/* Wicket Button */}
         <button
           onClick={onOpenWicketModal}
           disabled={disabled}

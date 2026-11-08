@@ -2,11 +2,14 @@ import axios from 'axios';
 import type {
   DeliveryCreate,
   DeliveryResponse,
+  InningsResponse,
   InningsScorecard,
   LiveMatchResponse,
   LiveScorerStateResponse,
+  ManualDeliveryUpdate,
   Match,
   MatchCreateRequest,
+  MatchResponse,
   MatchScorecardResponse,
   Player,
   SeedResponse,
@@ -64,6 +67,11 @@ export const cricketApi = {
     return res.data;
   },
 
+  abandonMatch: async (matchId: number): Promise<MatchResponse> => {
+    const res = await api.post<MatchResponse>(`/matches/${matchId}/abandon`);
+    return res.data;
+  },
+
   // Scorecards & Live Match
   getLiveTicker: async (matchId: number): Promise<LiveMatchResponse> => {
     const res = await api.get<LiveMatchResponse>(`/matches/${matchId}/live`);
@@ -105,20 +113,32 @@ export const cricketApi = {
     return res.data;
   },
 
-  swapStrike: async (matchId: number, inningsNumber: number): Promise<LiveScorerStateResponse> => {
-    const res = await api.post<LiveScorerStateResponse>(`/matches/${matchId}/innings/${inningsNumber}/swap-strike`);
+  patchLastDelivery: async (
+    matchId: number,
+    inningsNumber: number,
+    data: ManualDeliveryUpdate
+  ): Promise<DeliveryResponse> => {
+    const res = await api.patch<DeliveryResponse>(
+      `/matches/${matchId}/innings/${inningsNumber}/deliveries/last`,
+      data
+    );
     return res.data;
   },
 
-  setBowler: async (matchId: number, inningsNumber: number, bowlerId: number): Promise<LiveScorerStateResponse> => {
-    const res = await api.post<LiveScorerStateResponse>(`/matches/${matchId}/innings/${inningsNumber}/set-bowler`, {
+  swapStrike: async (matchId: number, inningsNumber: number): Promise<InningsResponse> => {
+    const res = await api.post<InningsResponse>(`/matches/${matchId}/innings/${inningsNumber}/swap-strike`);
+    return res.data;
+  },
+
+  setBowler: async (matchId: number, inningsNumber: number, bowlerId: number): Promise<InningsResponse> => {
+    const res = await api.post<InningsResponse>(`/matches/${matchId}/innings/${inningsNumber}/set-bowler`, {
       bowler_id: bowlerId,
     });
     return res.data;
   },
 
-  setIncomingBatter: async (matchId: number, inningsNumber: number, playerId: number): Promise<LiveScorerStateResponse> => {
-    const res = await api.post<LiveScorerStateResponse>(`/matches/${matchId}/innings/${inningsNumber}/set-incoming-batter`, {
+  setIncomingBatter: async (matchId: number, inningsNumber: number, playerId: number): Promise<InningsResponse> => {
+    const res = await api.post<InningsResponse>(`/matches/${matchId}/innings/${inningsNumber}/set-incoming-batter`, {
       player_id: playerId,
     });
     return res.data;
@@ -130,8 +150,8 @@ export const cricketApi = {
     strikerId: number,
     nonStrikerId: number,
     bowlerId: number
-  ): Promise<LiveScorerStateResponse> => {
-    const res = await api.post<LiveScorerStateResponse>(`/matches/${matchId}/innings/${inningsNumber}/start`, {
+  ): Promise<InningsResponse> => {
+    const res = await api.post<InningsResponse>(`/matches/${matchId}/innings/${inningsNumber}/start`, {
       striker_id: strikerId,
       non_striker_id: nonStrikerId,
       bowler_id: bowlerId,

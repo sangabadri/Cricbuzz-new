@@ -25,7 +25,7 @@ export const BattingTable: React.FC<BattingTableProps> = ({
       <table className="w-full text-left text-xs tabular-nums">
         <thead>
           <tr className="border-b border-[#21262d] bg-[#12161f] text-[10px] font-black uppercase tracking-wider text-slate-400">
-            <th className="py-2.5 px-4 font-bold">Batter</th>
+            <th className="sticky left-0 bg-[#161b22] z-10 py-2.5 px-4 font-bold">Batter</th>
             <th className="py-2.5 px-3">Dismissal</th>
             <th className="py-2.5 px-2.5 text-right font-black">R</th>
             <th className="py-2.5 px-2 text-right">B</th>
@@ -60,7 +60,7 @@ export const BattingTable: React.FC<BattingTableProps> = ({
                     !b.is_out ? 'border-l-2 border-[#38bdf8]' : 'border-l-2 border-transparent'
                   }`}
                 >
-                  <td className={`py-2.5 px-4 whitespace-nowrap ${!b.is_out ? 'font-extrabold text-white' : 'font-bold text-white'}`}>
+                  <td className={`sticky left-0 bg-[#161b22] z-10 py-2.5 px-4 whitespace-nowrap ${!b.is_out ? 'font-extrabold text-white' : 'font-bold text-white'}`}>
                     {b.player_name}
                     {!b.is_out && <span className="text-[#38bdf8] font-black ml-1">*</span>}
                   </td>
@@ -108,7 +108,7 @@ export const BattingTable: React.FC<BattingTableProps> = ({
           {/* Extras Row */}
           {extras && (
             <tr className="bg-[#12161f] text-slate-400 text-[11px] border-t border-[#21262d]">
-              <td className="py-2 px-4 font-bold text-slate-300">Extras</td>
+              <td className="sticky left-0 bg-[#161b22] z-10 py-2 px-4 font-bold text-slate-300">Extras</td>
               <td colSpan={6} className="py-2 px-3 text-right">
                 <span className="font-score font-bold text-white text-sm mr-2">{extras.total}</span>
                 <span className="text-[10px] text-slate-500 font-mono">
@@ -121,7 +121,7 @@ export const BattingTable: React.FC<BattingTableProps> = ({
           {/* Total Row */}
           {totals && (
             <tr className="bg-[#12161f] font-bold text-white border-t-2 border-[#21262d]">
-              <td className="py-2.5 px-4 font-black tracking-wide text-xs">Total</td>
+              <td className="sticky left-0 bg-[#161b22] z-10 py-2.5 px-4 font-black tracking-wide text-xs">Total</td>
               <td colSpan={6} className="py-2.5 px-3 text-right">
                 <span className="font-score text-lg font-bold text-white mr-2">
                   {totals.runs}/{totals.wickets}

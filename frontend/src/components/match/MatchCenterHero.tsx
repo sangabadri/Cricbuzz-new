@@ -25,6 +25,13 @@ export const MatchCenterHero: React.FC<MatchCenterHeroProps> = ({
   const teamAInfo = getTeamIdentity(ticker.team_a_name);
   const teamBInfo = getTeamIdentity(ticker.team_b_name);
 
+  // Partnership calculation from active scorecard innings
+  const currentInningsNum = ticker.current_innings_number || 1;
+  const activeInnings = scorecard?.innings?.find((i) => i.innings_number === currentInningsNum);
+  const currentPartnership = activeInnings?.partnerships?.[activeInnings.partnerships.length - 1];
+  const partnershipRuns = currentPartnership?.runs ?? currentPartnership?.total_runs ?? 0;
+  const partnershipBalls = currentPartnership?.balls ?? 0;
+
   return (
     <div
       className={`bg-[#161b22] border border-[#21262d] rounded-2xl p-5 lg:p-6 shadow-xl relative overflow-hidden ${className}`.trim()}
@@ -97,6 +104,43 @@ export const MatchCenterHero: React.FC<MatchCenterHeroProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Active Batters & Batting Partnership Ribbon */}
+      {(ticker.striker || ticker.non_striker || partnershipRuns > 0 || partnershipBalls > 0) && (
+        <div className="pt-3 pb-2 border-b border-[#21262d]/60 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-4 flex-wrap">
+            {ticker.striker && (
+              <div className="flex items-center gap-1.5 font-mono">
+                <span className="font-bold text-white flex items-center gap-1">
+                  <span>{ticker.striker.name}*</span>
+                  <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/40">
+                    Strike
+                  </span>
+                </span>
+                <span className="text-slate-400">
+                  {ticker.striker.runs} <span className="text-[10px]">({ticker.striker.balls})</span>
+                </span>
+              </div>
+            )}
+            {ticker.non_striker && (
+              <div className="flex items-center gap-1.5 font-mono">
+                <span className="font-medium text-slate-300">{ticker.non_striker.name}</span>
+                <span className="text-slate-400">
+                  {ticker.non_striker.runs} <span className="text-[10px]">({ticker.non_striker.balls})</span>
+                </span>
+              </div>
+            )}
+          </div>
+
+          {(partnershipRuns > 0 || partnershipBalls > 0) && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#21262d]/80 border border-[#30363d] text-[11px] font-mono text-slate-300">
+              <span className="text-slate-400 uppercase text-[9px] font-black tracking-wider">Partnership</span>
+              <strong className="text-white font-bold">{partnershipRuns}</strong>
+              <span className="text-slate-400">({partnershipBalls}b)</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Persistent Live Current Over Ribbon */}
       <div className="pt-3 pb-2 border-b border-[#21262d]/60 flex flex-wrap items-center justify-between gap-2">
