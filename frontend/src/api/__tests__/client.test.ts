@@ -94,21 +94,39 @@ describe('API Client Environment & Configuration', () => {
     expect(result).toEqual(mockMatch);
   });
 
-  it('verifies swapStrike, setBowler, setIncomingBatter, and startInnings endpoints', async () => {
-    const mockState = { match_id: 1, innings_number: 1, next_action: 'NEXT_BALL' };
-    const spy = vi.spyOn(api, 'post').mockResolvedValue({ data: mockState });
+  it('verifies abandonMatch endpoint', async () => {
+    const mockMatch = { id: 1, status: 'abandoned' };
+    const spy = vi.spyOn(api, 'post').mockResolvedValueOnce({ data: mockMatch });
+
+    const result = await cricketApi.abandonMatch(1);
+    expect(spy).toHaveBeenCalledWith('/matches/1/abandon');
+    expect(result).toEqual(mockMatch);
+  });
+
+  it('verifies patchLastDelivery endpoint', async () => {
+    const mockDelivery = { id: 5, runs: 4, is_wicket: false };
+    const spy = vi.spyOn(api, 'patch').mockResolvedValueOnce({ data: mockDelivery });
+
+    const result = await cricketApi.patchLastDelivery(1, 1, { runs: 4 });
+    expect(spy).toHaveBeenCalledWith('/matches/1/innings/1/deliveries/last', { runs: 4 });
+    expect(result).toEqual(mockDelivery);
+  });
+
+  it('verifies swapStrike, setBowler, setIncomingBatter, and startInnings return InningsResponse', async () => {
+    const mockInnings = { id: 1, match_id: 1, innings_number: 1, status: 'in_progress' };
+    const spy = vi.spyOn(api, 'post').mockResolvedValue({ data: mockInnings });
 
     const res1 = await cricketApi.swapStrike(1, 1);
     expect(spy).toHaveBeenCalledWith('/matches/1/innings/1/swap-strike');
-    expect(res1).toEqual(mockState);
+    expect(res1).toEqual(mockInnings);
 
     const res2 = await cricketApi.setBowler(1, 1, 42);
     expect(spy).toHaveBeenCalledWith('/matches/1/innings/1/set-bowler', { bowler_id: 42 });
-    expect(res2).toEqual(mockState);
+    expect(res2).toEqual(mockInnings);
 
     const res3 = await cricketApi.setIncomingBatter(1, 1, 99);
     expect(spy).toHaveBeenCalledWith('/matches/1/innings/1/set-incoming-batter', { player_id: 99 });
-    expect(res3).toEqual(mockState);
+    expect(res3).toEqual(mockInnings);
 
     const res4 = await cricketApi.startInnings(1, 1, 10, 11, 12);
     expect(spy).toHaveBeenCalledWith('/matches/1/innings/1/start', {
@@ -116,7 +134,7 @@ describe('API Client Environment & Configuration', () => {
       non_striker_id: 11,
       bowler_id: 12,
     });
-    expect(res4).toEqual(mockState);
+    expect(res4).toEqual(mockInnings);
   });
 
   it('verifies getApiErrorMessage handles Axios errors, Error instances, and fallbacks', () => {

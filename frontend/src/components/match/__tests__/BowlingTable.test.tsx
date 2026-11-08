@@ -154,4 +154,26 @@ describe('BowlingTable Component', () => {
     const { container } = render(<BowlingTable bowlers={[]} className="bowling-table-custom" />);
     expect(container.firstChild).toHaveClass('bowling-table-custom');
   });
+
+  it('applies sticky left-0 styling to bowler header and cells for mobile horizontal scrolling', () => {
+    const bowler: BowlerScorecard = {
+      player_id: 1,
+      player_name: 'Jasprit Bumrah',
+      overs: { completed_overs: 4, balls: 0, total_legal_balls: 24 },
+      maidens: 1,
+      runs: 14,
+      wickets: 2,
+      economy: 3.5,
+      wides: 0,
+      no_balls: 0,
+    };
+
+    const { container } = render(<BowlingTable bowlers={[bowler]} />);
+    const th = container.querySelector('th');
+    expect(th).toHaveClass('sticky', 'left-0', 'bg-[#161b22]', 'z-10');
+
+    const td = container.querySelector('tbody td');
+    expect(td).toHaveClass('sticky', 'left-0', 'bg-[#161b22]', 'z-10');
+  });
 });
+

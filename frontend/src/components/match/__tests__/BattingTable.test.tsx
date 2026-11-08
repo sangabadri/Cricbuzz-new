@@ -236,4 +236,25 @@ describe('BattingTable Component', () => {
     // With sr = Number(b.strike_rate) || 0, 0.toFixed(1) produces "0.0" without throwing
     expect(screen.getByText('0.0')).toBeInTheDocument();
   });
+
+  it('applies sticky left-0 styling to batter header and cells for mobile horizontal scrolling', () => {
+    const batter: BatterScorecard = {
+      player_id: 1,
+      player_name: 'Rohit Sharma',
+      runs: 50,
+      balls: 30,
+      fours: 5,
+      sixes: 2,
+      strike_rate: 166.7,
+      is_out: false,
+    };
+
+    const { container } = render(<BattingTable batters={[batter]} />);
+    const th = container.querySelector('th');
+    expect(th).toHaveClass('sticky', 'left-0', 'bg-[#161b22]', 'z-10');
+
+    const td = container.querySelector('tbody td');
+    expect(td).toHaveClass('sticky', 'left-0', 'bg-[#161b22]', 'z-10');
+  });
 });
+
