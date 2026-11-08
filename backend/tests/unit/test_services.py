@@ -122,7 +122,7 @@ async def test_innings_toss_connection_and_target_calculation():
 
     # Now create Innings 2: Innings 1 is completed with 150 runs
     inn1.status = InningsStatus.COMPLETED
-    innings_repo.get_by_match_and_number.side_effect = lambda m_id, n: inn1 if n == 1 else None
+    innings_repo.get_by_match_and_number.side_effect = lambda m_id, n, **kwargs: inn1 if n == 1 else None
     delivery_repo.list_by_innings.return_value = [
         Delivery(id=1, innings_id=1, over=0, ball=1, bowler_id=5, batsman_id=1, non_striker_id=2, runs=6, extra_type=None, extras=0),
         Delivery(id=2, innings_id=1, over=0, ball=2, bowler_id=5, batsman_id=1, non_striker_id=2, runs=4, extra_type=None, extras=0),
@@ -239,7 +239,7 @@ async def test_delivery_service_update_last_delivery():
         mom=None,
     )
     match_repo.get_by_id.return_value = match
-    innings_repo.get_by_match_and_number.side_effect = lambda m_id, num: innings if num == 1 else None
+    innings_repo.get_by_match_and_number.side_effect = lambda m_id, num, **kwargs: innings if num == 1 else None
     delivery_repo.get_last_delivery.return_value = existing_ball
     delivery_repo.list_by_innings.return_value = [existing_ball]
     delivery_repo.save.side_effect = lambda d: d
@@ -254,3 +254,62 @@ async def test_delivery_service_update_last_delivery():
     updated2 = await service.update_last_delivery(match_id=1, innings_number=1, delivery_in=manual_in)
     assert updated2.runs == 4
     assert updated2.commentary == "Boundary after review"
+
+
+@sync
+async def test_delivery_service_update_last_delivery_clearing_wicket():
+    match_repo = AsyncMock()
+    innings_repo = AsyncMock()
+    delivery_repo = AsyncMock()
+
+    innings = Innings(
+        id=1,
+        match_id=1,
+        innings_number=1,
+        batting_team_id=1,
+        bowling_team_id=2,
+        status=InningsStatus.IN_PROGRESS,
+    )
+    existing_ball = Delivery(
+        id=1,
+        innings_id=1,
+        over=0,
+        ball=1,
+        bowler_id=10,
+        batsman_id=20,
+        non_striker_id=21,
+        runs=0,
+        extra_type=None,
+        extras=0,
+        wicket_type=WicketType.CAUGHT,
+        player_out_id=20,
+        fielder_id=11,
+    )
+    match = Match(
+        id=1,
+        team_a=1,
+        team_b=2,
+        venue="MCG",
+        format=MatchFormat.T20,
+        status=MatchStatus.LIVE,
+    )
+    match_repo.get_by_id.return_value = match
+    innings_repo.get_by_match_and_number.side_effect = lambda m_id, num, **kwargs: innings if num == 1 else None
+    delivery_repo.get_last_delivery.return_value = existing_ball
+    delivery_repo.list_by_innings.return_value = [existing_ball]
+    delivery_repo.save.side_effect = lambda d: d
+
+    service = DeliveryService(delivery_repo, innings_repo, match_repo)
+
+    # Scorer corrects ball to 1 run and clears wicket
+    manual_in = ManualDeliveryUpdate(
+        runs=1,
+        wicket_type=None,
+        player_out_id=None,
+        fielder_id=None,
+    )
+    updated = await service.update_last_delivery(match_id=1, innings_number=1, delivery_in=manual_in)
+    assert updated.runs == 1
+    assert updated.wicket_type is None
+    assert updated.player_out_id is None
+    assert updated.fielder_id is None

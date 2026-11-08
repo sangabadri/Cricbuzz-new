@@ -1,8 +1,3 @@
-import pytest
-from app.models.delivery import Delivery
-from app.models.innings import Innings
-from app.models.match import Match
-from app.schemas.enums import ExtraType, InningsStatus, MatchFormat, MatchStatus, WicketType
 from app.services.scorecard import to_overs_record
 
 
@@ -36,3 +31,16 @@ def test_overs_record_conversion():
     assert ov120.completed_overs == 20
     assert ov120.balls == 0
     assert ov120.total_legal_balls == 120
+
+
+def test_overs_record_with_configured_balls_per_over():
+    # 10 balls with 6 balls_per_over -> 1.4
+    ov1 = to_overs_record(10, balls_per_over=6)
+    assert ov1.completed_overs == 1
+    assert ov1.balls == 4
+
+    # 10 balls with 8 balls_per_over -> 1.2
+    ov2 = to_overs_record(10, balls_per_over=8)
+    assert ov2.completed_overs == 1
+    assert ov2.balls == 2
+    assert ov2.total_legal_balls == 10

@@ -5,7 +5,6 @@ from contextlib import asynccontextmanager
 from typing import Any, Callable, Iterable
 import pytest
 
-from app.main import app
 from app.models.delivery import Delivery
 from app.models.innings import Innings
 from app.models.match import Match
@@ -19,13 +18,22 @@ from app.schemas.innings import InningsCreate
 from app.schemas.match import MatchCreate
 from app.schemas.player import PlayerCreate
 from app.schemas.squad import SquadCreate
-from app.services.delivery import DeliveryService, get_delivery_service
-from app.services.innings import InningsService, get_innings_service
-from app.services.match import MatchService, get_match_service
-from app.services.player import PlayerService, get_player_service
-from app.services.scorecard import ScorecardService, get_scorecard_service
-from app.services.squad import SquadService, get_squad_service
-from app.services.team import TeamService, get_team_service
+from app.api.deps import (
+    get_delivery_service,
+    get_innings_service,
+    get_match_service,
+    get_player_service,
+    get_scorecard_service,
+    get_squad_service,
+    get_team_service,
+)
+from app.services.delivery import DeliveryService
+from app.services.innings import InningsService
+from app.services.match import MatchService
+from app.services.player import PlayerService
+from app.services.scorecard import ScorecardService
+from app.services.squad import SquadService
+from app.services.team import TeamService
 
 
 def sync(async_fn: Callable[..., Coroutine[Any, Any, Any]]) -> Callable[..., Any]:
@@ -249,7 +257,7 @@ class InMemoryMatchRepository:
         self.store.matches[match.id] = match
         return match
 
-    async def get_by_id(self, match_id: int) -> Match | None:
+    async def get_by_id(self, match_id: int, for_update: bool = False) -> Match | None:
         return self.store.matches.get(match_id)
 
     async def list_all(
@@ -323,10 +331,12 @@ class InMemoryInningsRepository:
         self.store.innings[innings.id] = innings
         return innings
 
-    async def get_by_id(self, innings_id: int) -> Innings | None:
+    async def get_by_id(self, innings_id: int, for_update: bool = False) -> Innings | None:
         return self.store.innings.get(innings_id)
 
-    async def get_by_match_and_number(self, match_id: int, innings_number: int) -> Innings | None:
+    async def get_by_match_and_number(
+        self, match_id: int, innings_number: int, for_update: bool = False
+    ) -> Innings | None:
         for inn in self.store.innings.values():
             if inn.match_id == match_id and inn.innings_number == innings_number:
                 return inn
@@ -390,9 +400,10 @@ class InMemoryDeliveryRepository:
         return delivery
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def bypass_startup_lifespan():
     """Bypasses PostgreSQL connection during test startup lifespan."""
+    from app.main import app
     @asynccontextmanager
     async def dummy_lifespan(app):
         yield
@@ -407,8 +418,9 @@ def in_memory_store():
 
 
 @pytest.fixture
-def test_client(in_memory_store):
+def test_client(in_memory_store, bypass_startup_lifespan):
     """Provides zero-deadlock AsgiTestClient wired with in-memory persistence and genuine services."""
+    from app.main import app
     team_repo = InMemoryTeamRepository(in_memory_store)
     player_repo = InMemoryPlayerRepository(in_memory_store)
     match_repo = InMemoryMatchRepository(in_memory_store)
