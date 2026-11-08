@@ -1,8 +1,6 @@
-from fastapi import Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.database import get_db
 from app.domain.exceptions import EntityNotFoundError
 from app.domain.innings_aggregate import InningsAggregate
+from app.domain.rules.formats import get_format_rules
 from app.models.delivery import Delivery
 from app.models.innings import Innings
 from app.models.match import Match
@@ -30,11 +28,11 @@ from app.schemas.scorecard import (
 )
 
 
-def to_overs_record(legal_balls: int) -> OversRecord:
+def to_overs_record(legal_balls: int, balls_per_over: int = 6) -> OversRecord:
     """Converts total legal balls to an OversRecord."""
     return OversRecord(
-        completed_overs=legal_balls // 6,
-        balls=legal_balls % 6,
+        completed_overs=legal_balls // balls_per_over,
+        balls=legal_balls % balls_per_over,
         total_legal_balls=legal_balls,
     )
 
@@ -179,22 +177,25 @@ class ScorecardService:
         bowling_team = inn_teams_map.get(active_innings.bowling_team_id)
         deliveries = await self.delivery_repo.list_by_innings(active_innings.id)
 
+        format_rules = get_format_rules(match.format)
+        balls_per_over = format_rules.balls_per_over
+
         # Aggregate summary runs, wickets, legal balls
         total_runs = sum(d.runs + d.extras for d in deliveries)
         total_wickets = sum(1 for d in deliveries if d.wicket_type is not None)
         legal_balls = sum(1 for d in deliveries if d.extra_type not in (ExtraType.WIDE, ExtraType.NOBALL))
-        overs = to_overs_record(legal_balls)
-        crr = round(total_runs / (legal_balls / 6.0), 2) if legal_balls > 0 else 0.0
+        overs = to_overs_record(legal_balls, balls_per_over)
+        crr = round(total_runs / (legal_balls / float(balls_per_over)), 2) if legal_balls > 0 else 0.0
 
         runs_needed = None
         balls_remaining = None
         rrr = None
         if active_innings.target:
             runs_needed = max(0, active_innings.target - total_runs)
-            max_balls = match.format.max_overs * 6
+            max_balls = format_rules.max_overs * balls_per_over
             balls_remaining = max(0, max_balls - legal_balls)
             if balls_remaining > 0:
-                rrr = round(runs_needed / (balls_remaining / 6.0), 2)
+                rrr = round(runs_needed / (balls_remaining / float(balls_per_over)), 2)
 
         current_over_balls = []
         last_event_runs = None
@@ -288,11 +289,11 @@ class ScorecardService:
                         WicketType.HIT_WICKET,
                     )
                 )
-                b_econ = round(b_runs / (b_legal / 6.0), 2) if b_legal > 0 else None
+                b_econ = round(b_runs / (b_legal / float(balls_per_over)), 2) if b_legal > 0 else None
                 current_bowler = LiveBowler(
                     player_id=bowler_player.id,
                     name=bowler_player.name,
-                    overs=to_overs_record(b_legal),
+                    overs=to_overs_record(b_legal, balls_per_over),
                     maidens=0,
                     runs=b_runs,
                     wickets=b_wickets,
@@ -336,12 +337,15 @@ class ScorecardService:
         deliveries: list[Delivery],
     ) -> InningsScorecard:
         """Internal projection algorithm building an InningsScorecard with zero N+1 queries."""
+        format_rules = get_format_rules(match.format)
+        balls_per_over = format_rules.balls_per_over
+
         # 1. Total runs, wickets, overs, extras
         total_runs = sum(d.runs + d.extras for d in deliveries)
         total_wickets = sum(1 for d in deliveries if d.wicket_type is not None)
         legal_balls = sum(1 for d in deliveries if d.extra_type not in (ExtraType.WIDE, ExtraType.NOBALL))
-        overs = to_overs_record(legal_balls)
-        crr = round(total_runs / (legal_balls / 6.0), 2) if legal_balls > 0 else 0.0
+        overs = to_overs_record(legal_balls, balls_per_over)
+        crr = round(total_runs / (legal_balls / float(balls_per_over)), 2) if legal_balls > 0 else 0.0
 
         byes = sum(d.extras for d in deliveries if d.extra_type == ExtraType.BYE)
         leg_byes = sum(d.extras for d in deliveries if d.extra_type == ExtraType.LEGBYE)
@@ -456,15 +460,15 @@ class ScorecardService:
                 ov_deliveries = [d for d in b_deliveries if d.over == ov]
                 ov_legal = sum(1 for d in ov_deliveries if d.extra_type not in (ExtraType.WIDE, ExtraType.NOBALL))
                 ov_runs = sum(d.runs + d.extras for d in ov_deliveries if d.extra_type not in (ExtraType.BYE, ExtraType.LEGBYE))
-                if ov_legal == 6 and ov_runs == 0:
+                if ov_legal == balls_per_over and ov_runs == 0:
                     maidens += 1
 
-            b_econ = round(b_runs / (b_legal / 6.0), 2) if b_legal > 0 else None
+            b_econ = round(b_runs / (b_legal / float(balls_per_over)), 2) if b_legal > 0 else None
             bowling_cards.append(
                 BowlerScorecard(
                     player_id=b_id,
                     player_name=p_name,
-                    overs=to_overs_record(b_legal),
+                    overs=to_overs_record(b_legal, balls_per_over),
                     maidens=maidens,
                     runs=b_runs,
                     wickets=b_wickets,
@@ -492,7 +496,7 @@ class ScorecardService:
                         player_id=d.player_out_id,
                         player_name=out_p.name if out_p else f"Player {d.player_out_id}",
                         score=running_score,
-                        overs=to_overs_record(running_legal_balls),
+                        overs=to_overs_record(running_legal_balls, balls_per_over),
                     )
                 )
 
@@ -540,7 +544,7 @@ class ScorecardService:
                         wicket_number=p_wicket_number,
                         runs=current_p_runs,
                         balls=current_p_balls,
-                        overs=to_overs_record(current_p_balls),
+                        overs=to_overs_record(current_p_balls, balls_per_over),
                         batters=[
                             PartnershipBatter(player_id=b1_id, player_name=p1_name, runs=b1_runs, balls=b1_balls),
                             PartnershipBatter(player_id=b2_id, player_name=p2_name, runs=b2_runs, balls=b2_balls),
@@ -567,7 +571,7 @@ class ScorecardService:
                     wicket_number=p_wicket_number + 1,
                     runs=current_p_runs,
                     balls=current_p_balls,
-                    overs=to_overs_record(current_p_balls),
+                    overs=to_overs_record(current_p_balls, balls_per_over),
                     batters=[
                         PartnershipBatter(player_id=b1_id, player_name=p1_name, runs=b1_runs, balls=b1_balls),
                         PartnershipBatter(player_id=b2_id, player_name=p2_name, runs=b2_runs, balls=b2_balls),
@@ -596,11 +600,4 @@ class ScorecardService:
         )
 
 
-async def get_scorecard_service(session: AsyncSession = Depends(get_db)) -> ScorecardService:
-    """FastAPI dependency for injecting ScorecardService."""
-    match_repo = MatchRepository(session)
-    innings_repo = InningsRepository(session)
-    delivery_repo = DeliveryRepository(session)
-    player_repo = PlayerRepository(session)
-    team_repo = TeamRepository(session)
-    return ScorecardService(match_repo, innings_repo, delivery_repo, player_repo, team_repo)
+

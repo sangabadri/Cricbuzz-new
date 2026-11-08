@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
+from app.api.deps import get_scorecard_service
 from app.schemas.scorecard import InningsScorecard, LiveMatchResponse, MatchScorecardResponse
-from app.services.scorecard import ScorecardService, get_scorecard_service
+from app.services.scorecard import ScorecardService
 
 router = APIRouter(prefix="/matches", tags=["Scorecard"])
 

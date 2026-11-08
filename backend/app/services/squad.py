@@ -1,6 +1,3 @@
-from fastapi import Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.database import get_db
 from app.domain.exceptions import EntityNotFoundError, RuleViolationError
 from app.models.squad import Squad
 from app.repositories.match import MatchRepository
@@ -103,9 +100,4 @@ class SquadService:
         return squad
 
 
-async def get_squad_service(session: AsyncSession = Depends(get_db)) -> SquadService:
-    """FastAPI dependency for injecting SquadService."""
-    squad_repo = SquadRepository(session)
-    match_repo = MatchRepository(session)
-    player_repo = PlayerRepository(session)
-    return SquadService(squad_repo, match_repo, player_repo)
+

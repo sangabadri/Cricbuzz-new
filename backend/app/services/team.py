@@ -1,6 +1,3 @@
-from fastapi import Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.database import get_db
 from app.domain.exceptions import EntityNotFoundError, RuleViolationError
 from app.models.team import Team
 from app.repositories.team import TeamRepository
@@ -41,8 +38,4 @@ class TeamService:
         return await self.repository.list_all(limit=limit, offset=offset, search=search)
 
 
-# Dependency provider for FastAPI
-async def get_team_service(session: AsyncSession = Depends(get_db)) -> TeamService:
-    """FastAPI dependency injecting TeamService with TeamRepository."""
-    repository = TeamRepository(session)
-    return TeamService(repository)
+

@@ -1,6 +1,3 @@
-from fastapi import Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.database import get_db
 from app.domain.exceptions import EntityNotFoundError
 from app.models.player import Player
 from app.repositories.player import PlayerRepository
@@ -39,7 +36,4 @@ class PlayerService:
         return await self.repository.list_all(role=role, search=search, limit=limit, offset=offset)
 
 
-async def get_player_service(session: AsyncSession = Depends(get_db)) -> PlayerService:
-    """FastAPI dependency for injecting PlayerService."""
-    repository = PlayerRepository(session)
-    return PlayerService(repository)
+

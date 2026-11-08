@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, Query, status
+from app.api.deps import get_team_service
 from app.models.team import Team
 from app.schemas.team import TeamCreate, TeamResponse
-from app.services.team import TeamService, get_team_service
+from app.services.team import TeamService
 
 router = APIRouter(prefix="/teams", tags=["Teams"])
 

@@ -28,18 +28,24 @@ class InningsRepository:
         await self.session.refresh(innings)
         return innings
 
-    async def get_by_id(self, innings_id: int) -> Innings | None:
-        """Finds an innings by primary key ID."""
+    async def get_by_id(self, innings_id: int, for_update: bool = False) -> Innings | None:
+        """Finds an innings by primary key ID, with optional pessimistic row lock."""
         query = select(Innings).where(Innings.id == innings_id)
+        if for_update:
+            query = query.with_for_update()
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_by_match_and_number(self, match_id: int, innings_number: int) -> Innings | None:
-        """Finds an innings by match ID and innings number (1 or 2)."""
+    async def get_by_match_and_number(
+        self, match_id: int, innings_number: int, for_update: bool = False
+    ) -> Innings | None:
+        """Finds an innings by match ID and innings number (1 or 2), with optional pessimistic row lock."""
         query = select(Innings).where(
             Innings.match_id == match_id,
             Innings.innings_number == innings_number,
         )
+        if for_update:
+            query = query.with_for_update()
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 

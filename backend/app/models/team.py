@@ -5,4 +5,4 @@ class Team(Base):
     __tablename__="teams"
     
     id = Column(Integer, primary_key=True)
-    name = Column(String, nullable=False)
+    name = Column(String(100), nullable=False, unique=True)

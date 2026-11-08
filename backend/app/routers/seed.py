@@ -13,11 +13,18 @@ from app.schemas.match import MatchCreate, MatchToss
 from app.schemas.player import PlayerCreate
 from app.schemas.squad import SquadCreate, SquadPlayerItem
 from app.schemas.team import TeamCreate
-from app.services.innings import InningsService, get_innings_service
-from app.services.match import MatchService, get_match_service
-from app.services.player import PlayerService, get_player_service
-from app.services.squad import SquadService, get_squad_service
-from app.services.team import TeamService, get_team_service
+from app.api.deps import (
+    get_innings_service,
+    get_match_service,
+    get_player_service,
+    get_squad_service,
+    get_team_service,
+)
+from app.services.innings import InningsService
+from app.services.match import MatchService
+from app.services.player import PlayerService
+from app.services.squad import SquadService
+from app.services.team import TeamService
 
 router = APIRouter(prefix="/seed", tags=["Seed / Demo"])
 

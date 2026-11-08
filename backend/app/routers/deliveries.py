@@ -9,8 +9,9 @@ from app.schemas.delivery import (
     SetBowlerRequest,
     SetIncomingBatterRequest,
 )
+from app.api.deps import get_delivery_service
 from app.schemas.innings import InningsResponse
-from app.services.delivery import DeliveryService, get_delivery_service
+from app.services.delivery import DeliveryService
 
 router = APIRouter(prefix="/matches", tags=["Deliveries"])
 
@@ -27,8 +28,7 @@ async def record_delivery(
     delivery_in: DeliveryCreate,
     service: DeliveryService = Depends(get_delivery_service),
 ) -> LiveScorerStateResponse:
-    await service.record_delivery(match_id, innings_number, delivery_in)
-    return await service.get_live_scorer_state(match_id, innings_number)
+    return await service.record_delivery(match_id, innings_number, delivery_in, return_state=True)
 
 
 @router.post(

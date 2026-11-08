@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, Query, status
+from app.api.deps import get_player_service
 from app.models.player import Player
 from app.schemas.enums import Role
 from app.schemas.player import PlayerCreate, PlayerResponse
-from app.services.player import PlayerService, get_player_service
+from app.services.player import PlayerService
 
 router = APIRouter(prefix="/players", tags=["Players"])
 

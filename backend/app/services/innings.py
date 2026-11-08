@@ -1,6 +1,3 @@
-from fastapi import Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.database import get_db
 from app.domain.enums import InningsStatus, MatchStatus, TossDecision
 from app.domain.exceptions import EntityNotFoundError, RuleViolationError
 from app.models.innings import Innings
@@ -44,7 +41,7 @@ class InningsService:
             innings_in = InningsCreate()
 
         # 1. Match must exist
-        match = await self.match_repo.get_by_id(match_id)
+        match = await self.match_repo.get_by_id(match_id, for_update=True)
         if not match:
             raise EntityNotFoundError(f"Match with ID {match_id} not found")
 
@@ -55,7 +52,7 @@ class InningsService:
         match_teams = {match.team_a, match.team_b}
 
         # 3. Determine target innings number (auto-derive if not provided)
-        existing_inn1 = await self.innings_repo.get_by_match_and_number(match_id, 1)
+        existing_inn1 = await self.innings_repo.get_by_match_and_number(match_id, 1, for_update=True)
         if innings_in.innings_number is not None:
             target_innings_number = innings_in.innings_number
         else:
@@ -208,11 +205,11 @@ class InningsService:
         Scorer console entrypoint to start an innings by assigning opening batters and bowler.
         Transitions innings status to IN_PROGRESS and match status to LIVE.
         """
-        match = await self.match_repo.get_by_id(match_id)
+        match = await self.match_repo.get_by_id(match_id, for_update=True)
         if not match:
             raise EntityNotFoundError(f"Match with ID {match_id} not found")
 
-        innings = await self.innings_repo.get_by_match_and_number(match_id, innings_number)
+        innings = await self.innings_repo.get_by_match_and_number(match_id, innings_number, for_update=True)
         if not innings:
             raise EntityNotFoundError(f"Innings {innings_number} for Match {match_id} not found")
 
@@ -275,10 +272,4 @@ class InningsService:
         return await self.innings_repo.list_by_match(match_id)
 
 
-async def get_innings_service(session: AsyncSession = Depends(get_db)) -> InningsService:
-    """FastAPI dependency injecting InningsService."""
-    innings_repo = InningsRepository(session)
-    match_repo = MatchRepository(session)
-    delivery_repo = DeliveryRepository(session)
-    squad_repo = SquadRepository(session)
-    return InningsService(innings_repo, match_repo, delivery_repo, squad_repo)
+

@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, status
+from app.api.deps import get_innings_service
 from app.models.innings import Innings
 from app.schemas.innings import InningsResponse, StartInningsRequest
-from app.services.innings import InningsService, get_innings_service
+from app.services.innings import InningsService
 
 router = APIRouter(prefix="/matches", tags=["Innings"])
 

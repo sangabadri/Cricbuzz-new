@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, Query, status
+from app.api.deps import get_match_service
 from app.models.match import Match
 from app.schemas.enums import MatchStatus
 from app.schemas.match import MatchCreate, MatchMOM, MatchResponse, MatchToss
-from app.services.match import MatchService, get_match_service
+from app.services.match import MatchService
 
 router = APIRouter(prefix="/matches", tags=["Matches"])
 

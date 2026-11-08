@@ -1,6 +1,3 @@
-from fastapi import Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.database import get_db
 from app.domain.exceptions import EntityNotFoundError, RuleViolationError
 from app.models.match import Match
 from app.repositories.innings import InningsRepository
@@ -100,7 +97,10 @@ class MatchService:
 
     async def conduct_toss(self, match_id: int, toss: MatchToss) -> Match:
         """Conducts the coin toss for a scheduled match and auto-creates Innings 1."""
-        match = await self.get_match(match_id)
+        match = await self.match_repo.get_by_id(match_id, for_update=True)
+        if not match:
+            raise EntityNotFoundError(f"Match with ID {match_id} not found")
+        await self._enrich_team_names([match])
 
         # Rule 1: Toss can only be conducted if the match is still scheduled
         if match.status != MatchStatus.SCHEDULED:
@@ -139,7 +139,7 @@ class MatchService:
                 batting_team_id = other_team
                 bowling_team_id = toss.toss_winner
 
-            existing_inn1 = await self.innings_repo.get_by_match_and_number(match_id, 1)
+            existing_inn1 = await self.innings_repo.get_by_match_and_number(match_id, 1, for_update=True)
             if not existing_inn1:
                 await self.innings_repo.create(
                     match_id=match_id,
@@ -155,7 +155,10 @@ class MatchService:
 
     async def abandon_match(self, match_id: int) -> Match:
         """Marks a match as abandoned."""
-        match = await self.get_match(match_id)
+        match = await self.match_repo.get_by_id(match_id, for_update=True)
+        if not match:
+            raise EntityNotFoundError(f"Match with ID {match_id} not found")
+        await self._enrich_team_names([match])
         if match.status == MatchStatus.COMPLETED:
             raise RuleViolationError("Cannot abandon an already completed match")
         match.status = MatchStatus.ABANDONED
@@ -163,17 +166,14 @@ class MatchService:
 
     async def set_man_of_the_match(self, match_id: int, mom_in: MatchMOM) -> Match:
         """Awards Man of the Match to a player and locks match permanently."""
-        match = await self.get_match(match_id)
+        match = await self.match_repo.get_by_id(match_id, for_update=True)
+        if not match:
+            raise EntityNotFoundError(f"Match with ID {match_id} not found")
+        await self._enrich_team_names([match])
         if match.status != MatchStatus.COMPLETED:
             raise RuleViolationError("Man of the Match can only be awarded after the match has completed")
         match.mom = mom_in.player_id
         return await self.match_repo.save(match)
 
 
-async def get_match_service(session: AsyncSession = Depends(get_db)) -> MatchService:
-    """FastAPI dependency for injecting MatchService."""
-    match_repo = MatchRepository(session)
-    team_repo = TeamRepository(session)
-    squad_repo = SquadRepository(session)
-    innings_repo = InningsRepository(session)
-    return MatchService(match_repo, team_repo, squad_repo, innings_repo)
+

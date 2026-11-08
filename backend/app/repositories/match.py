@@ -28,9 +28,11 @@ class MatchRepository:
         await self.session.refresh(match)
         return match
 
-    async def get_by_id(self, match_id: int) -> Match | None:
-        """Finds a match by ID."""
+    async def get_by_id(self, match_id: int, for_update: bool = False) -> Match | None:
+        """Finds a match by ID, with optional pessimistic row lock."""
         query = select(Match).where(Match.id == match_id)
+        if for_update:
+            query = query.with_for_update()
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 

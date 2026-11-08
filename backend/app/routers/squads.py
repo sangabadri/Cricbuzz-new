@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, status
+from app.api.deps import get_squad_service
 from app.models.squad import Squad
 from app.schemas.squad import SquadCreate, SquadResponse
-from app.services.squad import SquadService, get_squad_service
+from app.services.squad import SquadService
 
 router = APIRouter(prefix="/matches", tags=["Squads"])
 
