@@ -127,3 +127,7 @@ export function getTeamIdentity(teamName?: string, teamId?: number): TeamIdentit
     ...palette,
   };
 }
+
+export const getTeamColor = (teamName?: string, teamId?: number): string => {
+  return getTeamIdentity(teamName, teamId).primaryColor;
+};

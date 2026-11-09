@@ -1,5 +1,13 @@
 import axios from 'axios';
 import type {
+  LoginCredentials,
+  MatchAccess,
+  MatchUserRole,
+  RegisterCredentials,
+  TokenResponse,
+  User,
+} from '../types/auth';
+import type {
   DeliveryCreate,
   DeliveryResponse,
   InningsResponse,
@@ -17,6 +25,16 @@ import type {
   Team,
 } from '../types/cricket';
 
+let currentAccessToken: string | null = null;
+
+export function setAccessToken(token: string | null) {
+  currentAccessToken = token;
+}
+
+export function getAccessToken(): string | null {
+  return currentAccessToken;
+}
+
 // Using relative /api prefix which is proxied by Vite in dev and routes to backend in prod
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api/v1',
@@ -24,6 +42,42 @@ export const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+api.interceptors.request.use((config) => {
+  if (currentAccessToken && config.headers) {
+    config.headers.Authorization = `Bearer ${currentAccessToken}`;
+  }
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
+      originalRequest._retry = true;
+      const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('cricbuzz_refresh_token') : null;
+      if (refreshToken) {
+        try {
+          const res = await axios.post<TokenResponse>(
+            `${api.defaults.baseURL}/auth/refresh`,
+            { refresh_token: refreshToken }
+          );
+          currentAccessToken = res.data.access_token;
+          localStorage.setItem('cricbuzz_refresh_token', res.data.refresh_token);
+          if (originalRequest.headers) {
+            originalRequest.headers.Authorization = `Bearer ${currentAccessToken}`;
+          }
+          return api(originalRequest);
+        } catch {
+          currentAccessToken = null;
+          localStorage.removeItem('cricbuzz_refresh_token');
+        }
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 export function getApiErrorMessage(err: unknown, fallback = 'Unknown error'): string {
   if (axios.isAxiosError(err)) {
@@ -184,8 +238,15 @@ export const cricketApi = {
   },
 
   // Teams & Players
-  getTeams: async (): Promise<Team[]> => {
-    const res = await api.get<Team[]>('/teams/');
+  getTeams: async (params?: { search?: string; limit?: number; offset?: number } | unknown): Promise<Team[]> => {
+    const isContext = params && typeof params === 'object' && 'queryKey' in params;
+    const cleanParams = !isContext && params && typeof params === 'object' ? params : undefined;
+    const res = await api.get<Team[]>('/teams/', { params: cleanParams });
+    return res.data;
+  },
+
+  getTeam: async (teamId: number): Promise<Team> => {
+    const res = await api.get<Team>(`/teams/${teamId}`);
     return res.data;
   },
 
@@ -194,8 +255,24 @@ export const cricketApi = {
     return res.data;
   },
 
-  getPlayers: async (search?: string): Promise<Player[]> => {
-    const res = await api.get<Player[]>('/players/', { params: { search, limit: 100 } });
+  getPlayers: async (
+    filter?: string | { search?: string; role?: string; limit?: number; offset?: number } | unknown
+  ): Promise<Player[]> => {
+    const isContext = filter && typeof filter === 'object' && 'queryKey' in filter;
+    let params: Record<string, unknown> | undefined = { limit: 100 };
+    if (!isContext) {
+      if (typeof filter === 'string') {
+        params.search = filter;
+      } else if (filter && typeof filter === 'object') {
+        params = { limit: 100, ...filter };
+      }
+    }
+    const res = await api.get<Player[]>('/players/', { params });
+    return res.data;
+  },
+
+  getPlayer: async (playerId: number): Promise<Player> => {
+    const res = await api.get<Player>(`/players/${playerId}`);
     return res.data;
   },
 
@@ -213,5 +290,40 @@ export const cricketApi = {
   seedDemoMatch: async (): Promise<SeedResponse> => {
     const res = await api.post<SeedResponse>('/seed/demo-match');
     return res.data;
+  },
+
+  // Authentication & Access
+  register: async (credentials: RegisterCredentials): Promise<TokenResponse> => {
+    const res = await api.post<TokenResponse>('/auth/register', credentials);
+    return res.data;
+  },
+
+  login: async (credentials: LoginCredentials): Promise<TokenResponse> => {
+    const res = await api.post<TokenResponse>('/auth/login', credentials);
+    return res.data;
+  },
+
+  refreshToken: async (refreshToken: string): Promise<TokenResponse> => {
+    const res = await api.post<TokenResponse>('/auth/refresh', { refresh_token: refreshToken });
+    return res.data;
+  },
+
+  getCurrentUser: async (): Promise<User> => {
+    const res = await api.get<User>('/auth/me');
+    return res.data;
+  },
+
+  getMatchAccess: async (matchId: number): Promise<MatchAccess[]> => {
+    const res = await api.get<MatchAccess[]>(`/matches/${matchId}/access`);
+    return res.data;
+  },
+
+  grantMatchAccess: async (matchId: number, username: string, role: MatchUserRole = 'scorer'): Promise<MatchAccess> => {
+    const res = await api.post<MatchAccess>(`/matches/${matchId}/access`, { username, role });
+    return res.data;
+  },
+
+  revokeMatchAccess: async (matchId: number, userId: number): Promise<void> => {
+    await api.delete(`/matches/${matchId}/access/${userId}`);
   },
 };
