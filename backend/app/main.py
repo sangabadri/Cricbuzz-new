@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from app.config import settings
 from app.database import engine
 from app.domain.exceptions import (
     CricketDomainError,
@@ -18,6 +19,8 @@ from app.models.match import Match
 from app.models.squad import Squad, SquadPlayer
 from app.models.innings import Innings
 from app.models.delivery import Delivery
+from app.models.user import User
+from app.models.match_access import MatchAccess
 from app.routers.api import api_router
 
 
@@ -44,7 +47,7 @@ app = FastAPI(
 # Enable CORS for local and web development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

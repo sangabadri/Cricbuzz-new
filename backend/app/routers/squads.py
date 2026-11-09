@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, status
-from app.api.deps import get_squad_service
+from app.api.deps import get_squad_service, require_match_access
+from app.domain.enums import MatchUserRole
 from app.models.squad import Squad
 from app.schemas.squad import SquadCreate, SquadResponse
 from app.services.squad import SquadService
@@ -12,6 +13,7 @@ router = APIRouter(prefix="/matches", tags=["Squads"])
     response_model=SquadResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Submit team squad for a match",
+    dependencies=[Depends(require_match_access([MatchUserRole.OWNER, MatchUserRole.SCORER]))],
 )
 async def create_squad(
     match_id: int,

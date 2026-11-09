@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import functools
 import json
 from collections.abc import Coroutine
@@ -11,7 +12,9 @@ from app.models.match import Match
 from app.models.player import Player
 from app.models.squad import Squad, SquadPlayer
 from app.models.team import Team
-from app.domain.enums import MatchStatus, InningsStatus, MatchFormat
+from app.models.user import User
+from app.models.match_access import MatchAccess
+from app.domain.enums import MatchStatus, InningsStatus, MatchFormat, MatchUserRole
 from app.domain.exceptions import RuleViolationError, EntityNotFoundError
 from app.schemas.delivery import DeliveryCreate
 from app.schemas.innings import InningsCreate
@@ -19,17 +22,23 @@ from app.schemas.match import MatchCreate
 from app.schemas.player import PlayerCreate
 from app.schemas.squad import SquadCreate
 from app.api.deps import (
+    get_auth_service,
     get_delivery_service,
     get_innings_service,
+    get_match_access_repo,
+    get_match_access_service,
     get_match_service,
     get_player_service,
     get_scorecard_service,
     get_squad_service,
     get_team_service,
+    get_user_repo,
 )
+from app.services.auth import AuthService
 from app.services.delivery import DeliveryService
 from app.services.innings import InningsService
 from app.services.match import MatchService
+from app.services.match_access import MatchAccessService
 from app.services.player import PlayerService
 from app.services.scorecard import ScorecardService
 from app.services.squad import SquadService
@@ -161,6 +170,8 @@ class InMemoryStore:
         self.squad_players: list[SquadPlayer] = []
         self.innings: dict[int, Innings] = {}
         self.deliveries: dict[int, Delivery] = []
+        self.users: dict[int, User] = {}
+        self.match_access: list[MatchAccess] = []
         self._team_seq = 0
         self._player_seq = 0
         self._match_seq = 0
@@ -168,6 +179,84 @@ class InMemoryStore:
         self._sp_seq = 0
         self._innings_seq = 0
         self._delivery_seq = 0
+        self._user_seq = 0
+        self._match_access_seq = 0
+
+
+class InMemoryUserRepository:
+    def __init__(self, store: InMemoryStore):
+        self.store = store
+
+    async def get_by_id(self, user_id: int) -> User | None:
+        return self.store.users.get(user_id)
+
+    async def get_by_username(self, username: str) -> User | None:
+        for u in self.store.users.values():
+            if u.username == username:
+                return u
+        return None
+
+    async def get_by_email(self, email: str) -> User | None:
+        for u in self.store.users.values():
+            if u.email == email:
+                return u
+        return None
+
+    async def create(self, username: str, email: str, password_hash: str, is_superuser: bool = False) -> User:
+        self.store._user_seq += 1
+        user = User(
+            id=self.store._user_seq,
+            username=username,
+            email=email,
+            password_hash=password_hash,
+            is_active=True,
+            is_superuser=is_superuser,
+            created_at=datetime.now(timezone.utc),
+        )
+        self.store.users[user.id] = user
+        return user
+
+
+class InMemoryMatchAccessRepository:
+    def __init__(self, store: InMemoryStore):
+        self.store = store
+
+    async def get_user_match_role(self, match_id: int, user_id: int) -> MatchUserRole | None:
+        for a in self.store.match_access:
+            if a.match_id == match_id and a.user_id == user_id:
+                return a.role
+        return None
+
+    async def grant_access(self, match_id: int, user_id: int, role: MatchUserRole, granted_by: int | None = None) -> MatchAccess:
+        for a in self.store.match_access:
+            if a.match_id == match_id and a.user_id == user_id:
+                a.role = role
+                a.granted_by = granted_by
+                return a
+        self.store._match_access_seq += 1
+        access = MatchAccess(
+            id=self.store._match_access_seq,
+            match_id=match_id,
+            user_id=user_id,
+            role=role,
+            granted_by=granted_by,
+            created_at=datetime.now(timezone.utc),
+        )
+        self.store.match_access.append(access)
+        return access
+
+    async def revoke_access(self, match_id: int, user_id: int) -> bool:
+        before = len(self.store.match_access)
+        self.store.match_access = [a for a in self.store.match_access if not (a.match_id == match_id and a.user_id == user_id)]
+        return len(self.store.match_access) < before
+
+    async def list_for_match(self, match_id: int) -> list[tuple[MatchAccess, str]]:
+        res = []
+        for a in self.store.match_access:
+            if a.match_id == match_id:
+                u = self.store.users.get(a.user_id)
+                res.append((a, u.username if u else "unknown"))
+        return res
 
 
 class InMemoryTeamRepository:
@@ -243,7 +332,7 @@ class InMemoryMatchRepository:
     def __init__(self, store: InMemoryStore):
         self.store = store
 
-    async def create(self, match_in: MatchCreate) -> Match:
+    async def create(self, match_in: MatchCreate, *args: Any, **kwargs: Any) -> Match:
         self.store._match_seq += 1
         match = Match(
             id=self.store._match_seq,
@@ -427,14 +516,18 @@ def test_client(in_memory_store, bypass_startup_lifespan):
     squad_repo = InMemorySquadRepository(in_memory_store)
     innings_repo = InMemoryInningsRepository(in_memory_store)
     delivery_repo = InMemoryDeliveryRepository(in_memory_store)
+    user_repo = InMemoryUserRepository(in_memory_store)
+    match_access_repo = InMemoryMatchAccessRepository(in_memory_store)
 
     team_service = TeamService(team_repo)
     player_service = PlayerService(player_repo)
-    match_service = MatchService(match_repo, team_repo, squad_repo, innings_repo)
+    match_service = MatchService(match_repo, team_repo, squad_repo, innings_repo, match_access_repo)
     squad_service = SquadService(squad_repo, match_repo)
     innings_service = InningsService(innings_repo, match_repo, delivery_repo, squad_repo)
     delivery_service = DeliveryService(delivery_repo, innings_repo, match_repo, squad_repo)
     scorecard_service = ScorecardService(match_repo, innings_repo, delivery_repo, player_repo, team_repo)
+    auth_service = AuthService(user_repo)
+    match_access_service = MatchAccessService(match_access_repo, match_repo, user_repo)
 
     async def _team():
         return team_service
@@ -457,6 +550,18 @@ def test_client(in_memory_store, bypass_startup_lifespan):
     async def _scorecard():
         return scorecard_service
 
+    async def _user_r():
+        return user_repo
+
+    async def _match_access_r():
+        return match_access_repo
+
+    async def _auth():
+        return auth_service
+
+    async def _match_access():
+        return match_access_service
+
     app.dependency_overrides[get_team_service] = _team
     app.dependency_overrides[get_player_service] = _player
     app.dependency_overrides[get_match_service] = _match
@@ -464,6 +569,10 @@ def test_client(in_memory_store, bypass_startup_lifespan):
     app.dependency_overrides[get_innings_service] = _innings
     app.dependency_overrides[get_delivery_service] = _delivery
     app.dependency_overrides[get_scorecard_service] = _scorecard
+    app.dependency_overrides[get_user_repo] = _user_r
+    app.dependency_overrides[get_match_access_repo] = _match_access_r
+    app.dependency_overrides[get_auth_service] = _auth
+    app.dependency_overrides[get_match_access_service] = _match_access
 
     return AsgiTestClient(app)
 

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, status
-from app.api.deps import get_innings_service
+from app.api.deps import get_innings_service, require_match_access
+from app.domain.enums import MatchUserRole
 from app.models.innings import Innings
 from app.schemas.innings import InningsResponse, StartInningsRequest
 from app.services.innings import InningsService
@@ -12,6 +13,7 @@ router = APIRouter(prefix="/matches", tags=["Innings"])
     response_model=InningsResponse,
     status_code=status.HTTP_200_OK,
     summary="Start an innings by setting openers and opening bowler",
+    dependencies=[Depends(require_match_access([MatchUserRole.OWNER, MatchUserRole.SCORER]))],
 )
 async def start_innings(
     match_id: int,

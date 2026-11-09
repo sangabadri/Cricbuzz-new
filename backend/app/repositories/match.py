@@ -13,7 +13,7 @@ class MatchRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def create(self, match_in: MatchCreate) -> Match:
+    async def create(self, match_in: MatchCreate, created_by: int | None = None) -> Match:
         """Inserts a new match into the database."""
         match = Match(
             team_a=match_in.team_a,
@@ -22,6 +22,7 @@ class MatchRepository:
             format=match_in.format,
             match_date=match_in.match_date,
             status=MatchStatus.SCHEDULED,
+            created_by=created_by,
         )
         self.session.add(match)
         await self.session.flush()

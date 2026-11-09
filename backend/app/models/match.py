@@ -20,6 +20,7 @@ class Match(Base):
     
     win_margin_runs = Column(Integer, nullable=True)
     win_margin_wickets = Column(Integer, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     
     __table_args__ = (
         CheckConstraint(

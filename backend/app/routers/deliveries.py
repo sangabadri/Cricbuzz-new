@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, status
+from app.api.deps import get_delivery_service, require_match_access
+from app.domain.enums import MatchUserRole
 from app.models.delivery import Delivery
 from app.models.innings import Innings
 from app.schemas.delivery import (
@@ -9,7 +11,6 @@ from app.schemas.delivery import (
     SetBowlerRequest,
     SetIncomingBatterRequest,
 )
-from app.api.deps import get_delivery_service
 from app.schemas.innings import InningsResponse
 from app.services.delivery import DeliveryService
 
@@ -21,6 +22,7 @@ router = APIRouter(prefix="/matches", tags=["Deliveries"])
     response_model=LiveScorerStateResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Record a delivery for live scorer console (returns updated match & crease state)",
+    dependencies=[Depends(require_match_access([MatchUserRole.OWNER, MatchUserRole.SCORER]))],
 )
 async def record_delivery(
     match_id: int,
@@ -36,6 +38,7 @@ async def record_delivery(
     response_model=InningsResponse,
     status_code=status.HTTP_200_OK,
     summary="Assign the bowler for the upcoming over",
+    dependencies=[Depends(require_match_access([MatchUserRole.OWNER, MatchUserRole.SCORER]))],
 )
 async def set_bowler(
     match_id: int,
@@ -51,6 +54,7 @@ async def set_bowler(
     response_model=InningsResponse,
     status_code=status.HTTP_200_OK,
     summary="Assign the incoming batter after a wicket dismissal (2-step wicket flow)",
+    dependencies=[Depends(require_match_access([MatchUserRole.OWNER, MatchUserRole.SCORER]))],
 )
 async def set_incoming_batter(
     match_id: int,
@@ -66,6 +70,7 @@ async def set_incoming_batter(
     response_model=InningsResponse,
     status_code=status.HTTP_200_OK,
     summary="Manually swap striker and non-striker ends",
+    dependencies=[Depends(require_match_access([MatchUserRole.OWNER, MatchUserRole.SCORER]))],
 )
 async def swap_strike(
     match_id: int,
@@ -92,6 +97,7 @@ async def get_scorer_state(
     "/{match_id}/innings/{innings_number}/deliveries/last",
     response_model=DeliveryResponse,
     summary="Correct specific fields of the last recorded delivery",
+    dependencies=[Depends(require_match_access([MatchUserRole.OWNER, MatchUserRole.SCORER]))],
 )
 async def patch_last_delivery(
     match_id: int,
@@ -106,6 +112,7 @@ async def patch_last_delivery(
     "/{match_id}/innings/{innings_number}/deliveries/last",
     response_model=DeliveryResponse,
     summary="Undo the last recorded delivery",
+    dependencies=[Depends(require_match_access([MatchUserRole.OWNER, MatchUserRole.SCORER]))],
 )
 async def undo_last_delivery(
     match_id: int,

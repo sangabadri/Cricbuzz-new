@@ -78,3 +78,10 @@ class ExtraType(str, Enum):
     NOBALL = "noball"
     BYE = "bye"
     LEGBYE = "leg-bye"
+
+
+class MatchUserRole(str, Enum):
+    OWNER = "owner"
+    SCORER = "scorer"
+    VIEWER = "viewer"
+

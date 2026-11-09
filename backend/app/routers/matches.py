@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, Query, status
-from app.api.deps import get_match_service
+from app.api.deps import get_current_user_optional, get_match_service, require_match_access
+from app.domain.enums import MatchUserRole
 from app.models.match import Match
+from app.models.user import User
 from app.schemas.enums import MatchStatus
 from app.schemas.match import MatchCreate, MatchMOM, MatchResponse, MatchToss
 from app.services.match import MatchService
@@ -16,9 +18,11 @@ router = APIRouter(prefix="/matches", tags=["Matches"])
 )
 async def create_match(
     match_in: MatchCreate,
+    current_user: User | None = Depends(get_current_user_optional),
     service: MatchService = Depends(get_match_service),
 ) -> Match:
-    return await service.create_match(match_in)
+    creator_id = current_user.id if current_user else None
+    return await service.create_match(match_in, creator_id=creator_id)
 
 
 @router.get(
@@ -54,6 +58,7 @@ async def list_matches(
     "/{match_id}/toss",
     response_model=MatchResponse,
     summary="Conduct match toss",
+    dependencies=[Depends(require_match_access([MatchUserRole.OWNER, MatchUserRole.SCORER]))],
 )
 async def conduct_toss(
     match_id: int,
@@ -67,6 +72,7 @@ async def conduct_toss(
     "/{match_id}/abandon",
     response_model=MatchResponse,
     summary="Abandon a match",
+    dependencies=[Depends(require_match_access([MatchUserRole.OWNER]))],
 )
 async def abandon_match(
     match_id: int,
@@ -79,6 +85,7 @@ async def abandon_match(
     "/{match_id}/mom",
     response_model=MatchResponse,
     summary="Award Man of the Match",
+    dependencies=[Depends(require_match_access([MatchUserRole.OWNER, MatchUserRole.SCORER]))],
 )
 async def award_mom(
     match_id: int,
