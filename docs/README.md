@@ -1,39 +1,30 @@
-# Docs map
+# Project Knowledge Base (`docs/`)
 
-Shared docs live here. Backend and frontend have their own `docs/` folders.
+This directory contains durable **project-specific knowledge** for Cricbuzz Tracker. 
 
-| Folder | What is inside |
+For the **agentic engineering workflow** (task sizing, checklists, templates, and review loop), refer to the workspace skill: [`.agents/skills/agentic-engineering/`](../.agents/skills/agentic-engineering/).
+
+---
+
+## Directory Map
+
+| Directory | What is inside |
 |---|---|
-| `process/` | How to work: pick size, small / medium / large process, context, running, many agents, review |
-| `templates/` | Fill-in forms: task brief, design plan, work split, review report, session notes, decision record |
-| `checklists/` | Start, diff review, finish, safety |
-| `decisions/` | Short records of important choices and why |
-| `domain/` | Cricket rules in plain words |
-| `examples/` | Filled-in examples of the process |
-| `notes/` | Session notes for work that spans sessions |
+| `domain/` | Cricket rules, match invariants, crease state, and scoring laws in plain words (`cricket-rules.md`). |
+| `decisions/` | Architectural Decision Records (ADRs 0001 through 0006) documenting key system designs and trade-offs. |
+| `notes/` | Session handoffs and milestone tracking across agent sessions. |
+| `examples/` | Worked domain examples of cricket scoring lifecycles. |
+| `backend/docs/` | Backend architecture guides, code patterns, and technical debt registers (`known-problems.md`). |
+| `frontend/docs/` | Frontend feature structure, folder map, component rules, and UI debt registers (`known-problems.md`). |
 
-## Names used here (simple words instead of textbook terms)
-| Textbook term | Name used here |
-|---|---|
-| Task specification | Task brief |
-| Acceptance criteria | "How we know it works" |
-| Definition of Done | Finish checklist |
-| Architecture / implementation plan | Design plan |
-| Task decomposition / delegation | Work split |
-| ADR (architecture decision record) | Decision record |
-| Handoff | Session notes |
-| Engineering constitution | Rules (AGENTS.md) |
-| Guardrails | Safety limits |
-| Autonomy levels 1/2/3 | Go ahead / Propose first / Stop and ask |
-| Orchestration | Splitting work between agents |
-| Context rot | Old chat clutter |
+---
 
-## Which file is the boss?
-1. The human's current instruction.
-2. `AGENTS.md` files.
-3. Decision records.
-4. Other docs.
-5. Chat history (weakest, can be old).
+## Which File is the Boss?
 
-For *how the system behaves right now*, the code and the tests win over every doc.
-If a doc and the code disagree, do not silently pick one: report it.
+1. The human's active instruction.
+2. `AGENTS.md` rules.
+3. Decision records (`docs/decisions/`).
+4. Other documentation.
+5. Chat history (weakest, can be outdated).
+
+For *how the system behaves right now*, the source code and automated tests are the truth. If a document and the code disagree, report it rather than silently picking one.

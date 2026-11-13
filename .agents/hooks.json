@@ -1,0 +1,17 @@
+{
+  "cricbuzz-safety": {
+    "enabled": true,
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import os, subprocess, sys; p = 'skills/agentic-engineering/scripts/pre_command_safety.py' if os.path.exists('skills/agentic-engineering/scripts/pre_command_safety.py') else '.agents/skills/agentic-engineering/scripts/pre_command_safety.py'; sys.exit(subprocess.call([sys.executable, p]))\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
