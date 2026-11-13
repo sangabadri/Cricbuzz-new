@@ -7,7 +7,9 @@ import { ProtectedRoute } from '../../../app/router/ProtectedRoute';
 import { cricketApi, getAccessToken } from '../../../lib/api/client';
 
 vi.mock('../../../lib/api/client', async () => {
-  const actual = await vi.importActual('../../../lib/api/client');
+  const actual = await vi.importActual<typeof import('../../../lib/api/client')>(
+    '../../../lib/api/client'
+  );
   return {
     ...actual,
     cricketApi: {
