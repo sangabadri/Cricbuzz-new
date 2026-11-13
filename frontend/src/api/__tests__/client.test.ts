@@ -221,9 +221,16 @@ describe('API Client Environment & Configuration', () => {
     expect(res3.data.success).toBe(true);
   });
 
-  it('clears session and rejects all concurrent requests when refresh fails', async () => {
+  it('clears session and rejects all concurrent requests when refresh fails with 401', async () => {
     localStorage.setItem('cricbuzz_refresh_token', 'expired-refresh-token');
-    const postSpy = vi.spyOn(axios, 'post').mockRejectedValueOnce(new Error('Invalid refresh token'));
+    const authError = new axios.AxiosError('Unauthorized', '401', undefined, undefined, {
+      status: 401,
+      statusText: 'Unauthorized',
+      headers: {},
+      config: {} as any,
+      data: { detail: 'Invalid refresh token' },
+    });
+    const postSpy = vi.spyOn(axios, 'post').mockRejectedValueOnce(authError);
 
     api.defaults.adapter = async (config) => {
       const error = new axios.AxiosError('Unauthorized', '401', config, undefined, {
@@ -246,6 +253,107 @@ describe('API Client Environment & Configuration', () => {
     expect(results[1].status).toBe('rejected');
     expect(localStorage.getItem('cricbuzz_refresh_token')).toBeNull();
     expect(getAccessToken()).toBeNull();
+  });
+
+  it('preserves refresh token in localStorage when refresh fails due to transient network error', async () => {
+    localStorage.setItem('cricbuzz_refresh_token', 'valid-refresh-token');
+    const networkError = new axios.AxiosError('Network Error', 'ERR_NETWORK');
+    const postSpy = vi.spyOn(axios, 'post').mockRejectedValueOnce(networkError);
+
+    api.defaults.adapter = async (config) => {
+      const error = new axios.AxiosError('Unauthorized', '401', config, undefined, {
+        status: 401,
+        statusText: 'Unauthorized',
+        headers: {},
+        config,
+        data: { detail: 'Token expired' },
+      });
+      return Promise.reject(error);
+    };
+
+    await expect(api.get('/matches/')).rejects.toThrow();
+    expect(postSpy).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem('cricbuzz_refresh_token')).toBe('valid-refresh-token');
+  });
+
+  it('coalesces direct cricketApi.refreshToken calls with concurrent 401 interceptor queries', async () => {
+    localStorage.setItem('cricbuzz_refresh_token', 'hydration-refresh-token');
+    const postSpy = vi.spyOn(axios, 'post').mockResolvedValueOnce({
+      data: {
+        access_token: 'hydrated-access-token',
+        refresh_token: 'hydrated-refresh-token',
+        token_type: 'bearer',
+        expires_in: 900,
+        user: { id: 1, username: 'admin', email: 'admin@test.com', is_active: true, is_superuser: false },
+      },
+    });
+
+    api.defaults.adapter = async (config) => {
+      const authHeader = config.headers?.Authorization;
+      if (!authHeader || !String(authHeader).includes('hydrated-access-token')) {
+        const error = new axios.AxiosError('Unauthorized', '401', config, undefined, {
+          status: 401,
+          statusText: 'Unauthorized',
+          headers: {},
+          config,
+          data: { detail: 'Token expired' },
+        });
+        return Promise.reject(error);
+      }
+      return {
+        data: [{ id: 1 }],
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config,
+      };
+    };
+
+    const [directRefresh, interceptedQuery] = await Promise.all([
+      cricketApi.refreshToken('hydration-refresh-token'),
+      api.get('/matches/'),
+    ]);
+
+    expect(postSpy).toHaveBeenCalledTimes(1);
+    expect(directRefresh.access_token).toBe('hydrated-access-token');
+    expect(interceptedQuery.data).toEqual([{ id: 1 }]);
+    expect(getAccessToken()).toBe('hydrated-access-token');
+  });
+
+  it('retries straggler 401 requests immediately when token was already refreshed by earlier request', async () => {
+    setAccessToken('stale-token');
+    localStorage.setItem('cricbuzz_refresh_token', 'current-refresh-token');
+    const postSpy = vi.spyOn(axios, 'post');
+
+    let adapterCalls = 0;
+    api.defaults.adapter = async (config) => {
+      adapterCalls++;
+      if (adapterCalls === 1) {
+        // Simulate another in-flight request having completed token refresh before this 401 arrives:
+        setAccessToken('already-refreshed-token');
+        const error = new axios.AxiosError('Unauthorized', '401', config, undefined, {
+          status: 401,
+          statusText: 'Unauthorized',
+          headers: {},
+          config,
+          data: { detail: 'Token expired' },
+        });
+        return Promise.reject(error);
+      }
+      return {
+        data: { success: true, count: adapterCalls },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config,
+      };
+    };
+
+    const res = await api.get('/matches/');
+
+    expect(postSpy).not.toHaveBeenCalled();
+    expect(adapterCalls).toBe(2);
+    expect(res.data.success).toBe(true);
   });
 
   it('does not attempt token refresh when /auth/refresh returns 401', async () => {
