@@ -12,6 +12,7 @@ from app.domain.exceptions import (
     OverProgressionError,
     AuthenticationRequiredError,
     AccessDeniedError,
+    EntityConflictError,
 )
 from app.models.base import Base
 # Import all models here so that Base.metadata knows about them on startup
@@ -63,6 +64,7 @@ DOMAIN_EXCEPTION_STATUS_MAP: dict[type[CricketDomainError], int] = {
     OverProgressionError: 400,
     AuthenticationRequiredError: 401,
     AccessDeniedError: 403,
+    EntityConflictError: 409,
 }
 
 
@@ -71,7 +73,17 @@ async def domain_exception_handler(request: Request, exc: CricketDomainError):
     """
     Global exception handler translating pure domain exceptions into appropriate HTTP responses.
     """
-    status_code = DOMAIN_EXCEPTION_STATUS_MAP.get(type(exc), 404 if isinstance(exc, EntityNotFoundError) else 400)
+    if isinstance(exc, AuthenticationRequiredError):
+        status_code = 401
+    elif isinstance(exc, AccessDeniedError):
+        status_code = 403
+    elif isinstance(exc, EntityNotFoundError):
+        status_code = 404
+    elif isinstance(exc, EntityConflictError):
+        status_code = 409
+    else:
+        status_code = DOMAIN_EXCEPTION_STATUS_MAP.get(type(exc), 400)
+
     headers = {"WWW-Authenticate": "Bearer"} if isinstance(exc, AuthenticationRequiredError) else None
     return JSONResponse(
         status_code=status_code,

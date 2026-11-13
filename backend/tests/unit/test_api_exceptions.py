@@ -3,10 +3,16 @@ import json
 from unittest.mock import AsyncMock
 from app.main import DOMAIN_EXCEPTION_STATUS_MAP, domain_exception_handler
 from app.domain.exceptions import (
-    EntityNotFoundError,
-    RuleViolationError,
+    AccessDeniedError,
+    AuthenticationRequiredError,
     CreaseViolationError,
+    EntityConflictError,
+    EntityNotFoundError,
+    InactiveUserError,
+    InvalidCredentialsError,
     OverProgressionError,
+    RuleViolationError,
+    TokenExpiredOrInvalidError,
 )
 
 
@@ -29,6 +35,9 @@ def test_exception_handler_status_map():
     assert DOMAIN_EXCEPTION_STATUS_MAP[RuleViolationError] == 400
     assert DOMAIN_EXCEPTION_STATUS_MAP[CreaseViolationError] == 400
     assert DOMAIN_EXCEPTION_STATUS_MAP[OverProgressionError] == 400
+    assert DOMAIN_EXCEPTION_STATUS_MAP[EntityConflictError] == 409
+    assert DOMAIN_EXCEPTION_STATUS_MAP[AuthenticationRequiredError] == 401
+    assert DOMAIN_EXCEPTION_STATUS_MAP[AccessDeniedError] == 403
 
 
 @sync
@@ -65,3 +74,31 @@ async def test_domain_exception_handler_over_progression():
     response = await domain_exception_handler(req, exc)
     assert response.status_code == 400
     assert json.loads(response.body) == {"detail": "Consecutive overs prohibited"}
+
+
+@sync
+async def test_domain_exception_handler_entity_conflict():
+    req = AsyncMock()
+    exc = EntityConflictError("Username 'admin' is already taken")
+    response = await domain_exception_handler(req, exc)
+    assert response.status_code == 409
+    assert json.loads(response.body) == {"detail": "Username 'admin' is already taken"}
+
+
+@sync
+async def test_domain_exception_handler_invalid_credentials_headers():
+    req = AsyncMock()
+    exc = InvalidCredentialsError("Invalid username or password")
+    response = await domain_exception_handler(req, exc)
+    assert response.status_code == 401
+    assert response.headers["WWW-Authenticate"] == "Bearer"
+    assert json.loads(response.body) == {"detail": "Invalid username or password"}
+
+
+@sync
+async def test_domain_exception_handler_access_denied():
+    req = AsyncMock()
+    exc = InactiveUserError("User account is inactive")
+    response = await domain_exception_handler(req, exc)
+    assert response.status_code == 403
+    assert json.loads(response.body) == {"detail": "User account is inactive"}

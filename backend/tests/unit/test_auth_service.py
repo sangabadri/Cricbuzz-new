@@ -1,5 +1,9 @@
 import pytest
-from app.domain.exceptions import RuleViolationError
+from app.domain.exceptions import (
+    EntityConflictError,
+    InvalidCredentialsError,
+    TokenExpiredOrInvalidError,
+)
 from app.schemas.auth import UserLogin, UserRegister
 from app.services.auth import AuthService
 from tests.conftest import InMemoryStore, InMemoryUserRepository, sync
@@ -54,7 +58,7 @@ async def test_registration_duplicate_username_and_email_rejected(auth_fixture):
         email="different@example.com",
         password="Password123!",
     )
-    with pytest.raises(RuleViolationError, match="already taken"):
+    with pytest.raises(EntityConflictError, match="already taken"):
         await auth_service.register(reg_dup_user)
 
     # Duplicate email
@@ -63,7 +67,7 @@ async def test_registration_duplicate_username_and_email_rejected(auth_fixture):
         email="unique1@example.com",
         password="Password123!",
     )
-    with pytest.raises(RuleViolationError, match="already registered"):
+    with pytest.raises(EntityConflictError, match="already registered"):
         await auth_service.register(reg_dup_email)
 
 
@@ -80,7 +84,7 @@ async def test_login_invalid_password_rejected(auth_fixture):
 
     # Wrong password
     login_in = UserLogin(username="valid_user", password="WrongPassword999!")
-    with pytest.raises(RuleViolationError, match="Invalid username or password"):
+    with pytest.raises(InvalidCredentialsError, match="Invalid username or password"):
         await auth_service.login(login_in)
 
 
@@ -102,5 +106,5 @@ async def test_refresh_token_rotation_and_invalid_token(auth_fixture):
     assert next_refresh != refresh_token
 
     # Invalid token rejection
-    with pytest.raises(RuleViolationError, match="Invalid or expired"):
+    with pytest.raises(TokenExpiredOrInvalidError, match="Invalid or expired"):
         await auth_service.refresh_tokens("invalid.malformed.token")

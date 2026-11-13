@@ -41,6 +41,26 @@ class AuthenticationRequiredError(CricketDomainError):
     pass
 
 
+class InvalidCredentialsError(AuthenticationRequiredError):
+    """Raised when provided authentication credentials (username or password) are incorrect."""
+    pass
+
+
+class TokenExpiredOrInvalidError(AuthenticationRequiredError):
+    """Raised when an authentication or refresh token is expired, malformed, or invalid."""
+    pass
+
+
 class AccessDeniedError(CricketDomainError):
     """Raised when an authenticated actor lacks the required authorization role."""
+    pass
+
+
+class InactiveUserError(AccessDeniedError):
+    """Raised when an account is deactivated or suspended."""
+    pass
+
+
+class EntityConflictError(CricketDomainError):
+    """Raised when an entity creation or update conflicts with an existing unique resource."""
     pass

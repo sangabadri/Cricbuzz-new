@@ -44,7 +44,7 @@ async def test_auth_registration_login_and_me_e2e(test_client: AsgiTestClient):
     assert login_resp.status_code == 200
     assert "access_token" in login_resp.json()
 
-    # 5. Login with invalid password -> 400
+    # 5. Login with invalid password -> 401 Unauthorized
     bad_login_resp = await test_client.post(
         "/api/v1/auth/login",
         json={
@@ -52,9 +52,21 @@ async def test_auth_registration_login_and_me_e2e(test_client: AsgiTestClient):
             "password": "WrongPassword999!",
         },
     )
-    assert bad_login_resp.status_code == 400
+    assert bad_login_resp.status_code == 401
+    assert "Bearer" in bad_login_resp.headers.get("www-authenticate", "")
 
-    # 6. Refresh token
+    # 6. Duplicate registration -> 409 Conflict
+    dup_reg_resp = await test_client.post(
+        "/api/v1/auth/register",
+        json={
+            "username": "scorer_alice",
+            "email": "different_alice@cricket.org",
+            "password": "SecurePassword123!",
+        },
+    )
+    assert dup_reg_resp.status_code == 409
+
+    # 7. Refresh token
     refresh_resp = await test_client.post(
         "/api/v1/auth/refresh",
         json={"refresh_token": alice_refresh},
@@ -62,6 +74,13 @@ async def test_auth_registration_login_and_me_e2e(test_client: AsgiTestClient):
     assert refresh_resp.status_code == 200
     assert "access_token" in refresh_resp.json()
     assert refresh_resp.json()["refresh_token"] != alice_refresh
+
+    # 8. Invalid refresh token -> 401 Unauthorized
+    bad_refresh_resp = await test_client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": "invalid.malformed.token"},
+    )
+    assert bad_refresh_resp.status_code == 401
 
 
 @sync

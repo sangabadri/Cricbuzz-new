@@ -1,5 +1,11 @@
 import jwt
-from app.domain.exceptions import EntityNotFoundError, RuleViolationError
+from app.domain.exceptions import (
+    EntityConflictError,
+    EntityNotFoundError,
+    InactiveUserError,
+    InvalidCredentialsError,
+    TokenExpiredOrInvalidError,
+)
 from app.models.user import User
 from app.repositories.user import UserRepository
 from app.schemas.auth import UserLogin, UserRegister
@@ -20,12 +26,12 @@ class AuthService:
         # Validate unique username
         existing_username = await self.user_repo.get_by_username(user_in.username)
         if existing_username:
-            raise RuleViolationError(f"Username '{user_in.username}' is already taken")
+            raise EntityConflictError(f"Username '{user_in.username}' is already taken")
 
         # Validate unique email
         existing_email = await self.user_repo.get_by_email(user_in.email)
         if existing_email:
-            raise RuleViolationError(f"Email '{user_in.email}' is already registered")
+            raise EntityConflictError(f"Email '{user_in.email}' is already registered")
 
         # Hash password and create user
         pw_hash = hash_password(user_in.password)
@@ -42,13 +48,13 @@ class AuthService:
     async def login(self, login_in: UserLogin) -> tuple[User, str, str]:
         user = await self.user_repo.get_by_username(login_in.username)
         if not user:
-            raise RuleViolationError("Invalid username or password")
+            raise InvalidCredentialsError("Invalid username or password")
 
         if not verify_password(login_in.password, user.password_hash):
-            raise RuleViolationError("Invalid username or password")
+            raise InvalidCredentialsError("Invalid username or password")
 
         if not user.is_active:
-            raise RuleViolationError("User account is inactive")
+            raise InactiveUserError("User account is inactive")
 
         access_token = create_access_token({"sub": str(user.id), "username": user.username})
         refresh_token = create_refresh_token({"sub": str(user.id)})
@@ -58,14 +64,16 @@ class AuthService:
         try:
             payload = decode_token(refresh_token)
             if payload.get("type") != "refresh":
-                raise RuleViolationError("Invalid token type")
+                raise TokenExpiredOrInvalidError("Invalid token type")
             user_id = int(payload.get("sub", 0))
         except (jwt.PyJWTError, ValueError) as err:
-            raise RuleViolationError("Invalid or expired refresh token") from err
+            raise TokenExpiredOrInvalidError("Invalid or expired refresh token") from err
 
         user = await self.user_repo.get_by_id(user_id)
-        if not user or not user.is_active:
-            raise RuleViolationError("User not found or inactive")
+        if not user:
+            raise EntityNotFoundError(f"User with ID {user_id} not found")
+        if not user.is_active:
+            raise InactiveUserError("User account is inactive")
 
         new_access_token = create_access_token({"sub": str(user.id), "username": user.username})
         new_refresh_token = create_refresh_token({"sub": str(user.id)})

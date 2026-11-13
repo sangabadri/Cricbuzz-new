@@ -19,11 +19,8 @@ The auth and match access implementation introduced architectural boundary viola
 ### D. [RESOLVED - 2026-11-13] Dual Source of Truth & Cascade Privilege Drop (Extensibility / Correctness)
 - Resolved per ADR 0007: Removed `created_by` column from `Match` model completely, keeping `Match` pure cricket domain data. Canonical ownership resides solely in `match_access` with `role = MatchUserRole.OWNER`.
 
-### E. Semantic Misappropriation of `CricketDomainError` for Auth (Consistency / HTTP Contract)
-- `AuthService.login`, `register`, and `refresh_tokens` raise `RuleViolationError` for invalid passwords, duplicate usernames, and expired tokens.
-- Global exception handler in `main.py` maps `RuleViolationError` to `HTTP 400 Bad Request`.
-- Result: Authentication failures return `400 Bad Request` instead of `401 Unauthorized`; duplicate usernames return `400` instead of `409 Conflict`. This confuses API clients and breaks standard Axios/fetch auth interceptors.
-- **Remediation**: Create a distinct `AuthError` hierarchy mapped to proper HTTP status codes (401, 403, 409).
+### E. [RESOLVED - 2026-11-13] Semantic Misappropriation of `CricketDomainError` for Auth (Consistency / HTTP Contract)
+- Resolved in Slice D: Introduced `InvalidCredentialsError`, `InactiveUserError`, `EntityConflictError`, and `TokenExpiredOrInvalidError` in `domain/exceptions.py`. Updated `main.py`'s global handler to map 401 with `WWW-Authenticate: Bearer` header, 403, and 409 Conflict.
 
 ### F. Stateless Refresh Tokens Without Revocation/Blacklist (Security)
 - `create_refresh_token` generates a 7-day JWT with a `jti` UUID, but `jti` is never stored.
@@ -36,9 +33,8 @@ The auth and match access implementation introduced architectural boundary viola
 ### H. [RESOLVED - 2026-11-13] Tight Coupling in `MatchService` (Extensibility / Coupling)
 - Resolved: Decoupled `MatchRepository` injection in `deps.py` via `get_match_repo()`; eliminated private attribute extraction `match_service.match_repo`.
 
-### I. Correlated Error in Auth Test Suite (Testability)
-- `tests/e2e/test_auth_and_access_e2e.py` and `tests/unit/test_auth_service.py` assert `status_code == 400` on invalid password login. The tests pass because they encode the implementation defect rather than the true HTTP requirement.
-- **Remediation**: Update tests to assert `401 Unauthorized` once proper error mapping is implemented.
+### I. [RESOLVED - 2026-11-13] Correlated Error in Auth Test Suite (Testability)
+- Resolved in Slice D: Updated `test_auth_service.py` to assert typed domain exceptions and `test_auth_and_access_e2e.py` to assert standard HTTP status codes (401 with `WWW-Authenticate: Bearer` and 409 Conflict).
 
 ---
 
