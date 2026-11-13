@@ -61,7 +61,7 @@ def check_frontend_ui_invariants() -> tuple[bool, str]:
         return True, "components/ui not present"
 
     violations = []
-    for ts_file in ui_dir.rglob("*.tsx"):
+    for ts_file in [f for f in ui_dir.rglob("*") if f.suffix in {".ts", ".tsx"}]:
         try:
             content = ts_file.read_text(encoding="utf-8")
             for idx, line in enumerate(content.splitlines(), start=1):
@@ -77,6 +77,8 @@ def check_frontend_ui_invariants() -> tuple[bool, str]:
 
 def find_python() -> list[str]:
     """Finds Python 3.11 executable for backend pytest."""
+    if sys.version_info >= (3, 11):
+        return [sys.executable]
     py311_path = Path("C:/Program Files/Python311/python.exe")
     if py311_path.exists():
         return [str(py311_path)]
@@ -99,6 +101,28 @@ def run_backend_tests() -> tuple[bool, str]:
         return False, f"{summary} ({dur}s)"
     except Exception as e:
         return False, f"Pytest execution failed: {e}"
+
+
+def run_frontend_lint() -> tuple[bool, str]:
+    """Runs npm run lint (oxlint)."""
+    t0 = time.time()
+    try:
+        proc = subprocess.run(
+            ["npm", "run", "lint"],
+            cwd=str(FRONTEND_DIR),
+            capture_output=True,
+            text=True,
+            shell=True,
+            timeout=30,
+        )
+        dur = round(time.time() - t0, 2)
+        if proc.returncode == 0:
+            return True, f"Lint passed ({dur}s)"
+        err = proc.stdout.strip() or proc.stderr.strip()
+        first_line = err.splitlines()[0] if err else "Lint failed"
+        return False, f"{first_line} ({dur}s)"
+    except Exception as e:
+        return False, f"Lint execution failed: {e}"
 
 
 def run_frontend_build() -> tuple[bool, str]:
@@ -154,8 +178,13 @@ def main():
     if not be_ok:
         all_passed = False
 
-    # 3. Frontend Build (Full & Baseline modes)
+    # 3. Frontend Lint & Build (Full & Baseline modes)
     if args.full or args.baseline:
+        lint_ok, lint_msg = run_frontend_lint()
+        results.append(("Frontend Lint (oxlint)", lint_ok, lint_msg))
+        if not lint_ok:
+            all_passed = False
+
         fe_ok, fe_msg = run_frontend_build()
         results.append(("Frontend Typecheck & Build", fe_ok, fe_msg))
         if not fe_ok:

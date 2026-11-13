@@ -30,7 +30,7 @@ Things anyone can check by looking or running. Each line becomes at least one te
 | 1 | | | |
 
 ## Size
-Small / Medium / Large (see `process/00-pick-the-size.md`)
+Small / Medium / Large (see [references/processes/00-pick-the-size.md](../../references/processes/00-pick-the-size.md))
 
 ## Keep these separate
 - Requirement: what must happen. ("Several scorers can open one match.")

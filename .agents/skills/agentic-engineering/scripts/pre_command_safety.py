@@ -17,6 +17,8 @@ import sys
 DESTRUCTIVE_PATTERNS = [
     (r"\bgit\s+push\s+.*(--force|-f)\b", "Force pushing to git remote is prohibited by safety rules."),
     (r"\bgit\s+reset\s+--hard\b", "git reset --hard will discard working tree changes; prohibited."),
+    (r"\bgit\s+clean\s+.*-[a-zA-Z]*f\b", "git clean with force will permanently delete untracked files; prohibited."),
+    (r"\bgit\s+branch\s+-[dD]\b", "Deleting git branches is prohibited."),
     (r"\b(drop|truncate)\s+(database|table)\b", "Direct database or table deletion is prohibited."),
     (r"\brm\s+-[a-zA-Z]*r[a-zA-Z]*f\s+[/~]", "Recursive deletion of root or home directory is prohibited."),
     (r"\brmdir\s+/s\s+/q\s+[cCdD]:\\", "Root drive recursive deletion is prohibited."),

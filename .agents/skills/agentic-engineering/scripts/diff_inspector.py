@@ -34,6 +34,14 @@ def main():
         diff_names = run_cmd(["git", "diff", "--name-only", "HEAD"]).splitlines()
 
     files = [f.strip() for f in diff_names if f.strip()]
+    if status_raw:
+        for line in status_raw.splitlines():
+            line = line.strip()
+            if line.startswith("??"):
+                untracked_file = line[2:].strip().strip('"')
+                if untracked_file and untracked_file not in files:
+                    files.append(untracked_file)
+
     count = len(files)
 
     print(f"Total Files Modified: {count}")

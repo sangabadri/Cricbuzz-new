@@ -8,7 +8,7 @@ plus new screens, anything about users or permissions (needs a decision record f
    rules need explicit, written answers.
 2. Explore: structure, rules, similar features, what could be affected.
 3. Design plan with at least two options and trade-offs. Mark every "Stop and ask" decision.
-4. Human approves. Save an important choice as a decision record (`templates/decision-record.md`).
+4. Human approves. Save an important choice as a decision record ([decision-record.md](../../resources/templates/decision-record.md)).
 
 ## Phase 2: Fix the contracts
 5. Write the **contract** before any code:
@@ -17,7 +17,7 @@ plus new screens, anything about users or permissions (needs a decision record f
    - Frontend types matching the API.
 6. Human approves contracts. Parallel work is only safe after this.
 
-## Phase 3: Split work (`templates/work-split.md`)
+## Phase 3: Split work ([work-split.md](../../resources/templates/work-split.md))
 7. Draw the dependency order. Typical:
    `contract -> database + backend  ->  frontend uses real or fake API  ->  join  ->  review`
 8. Give every file/folder ONE owner. If two tasks need the same file, do them one after the other.
@@ -46,4 +46,4 @@ plus new screens, anything about users or permissions (needs a decision record f
 - A decision in "Stop and ask" is needed.
 - The scope is growing beyond the brief.
 - A test that matters keeps failing and the cause is unclear.
-- A step needs something forbidden by `checklists/safety.md`.
+- A step needs something forbidden by [safety.md](../checklists/safety.md).

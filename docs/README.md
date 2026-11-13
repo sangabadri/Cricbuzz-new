@@ -11,7 +11,7 @@ For the **agentic engineering workflow** (task sizing, checklists, templates, an
 | Directory | What is inside |
 |---|---|
 | `domain/` | Cricket rules, match invariants, crease state, and scoring laws in plain words (`cricket-rules.md`). |
-| `decisions/` | Architectural Decision Records (ADRs 0001 through 0006) documenting key system designs and trade-offs. |
+| `decisions/` | Architectural Decision Records (ADRs 0001 through 0007) documenting key system designs and trade-offs. |
 | `notes/` | Session handoffs and milestone tracking across agent sessions. |
 | `examples/` | Worked domain examples of cricket scoring lifecycles. |
 | `backend/docs/` | Backend architecture guides, code patterns, and technical debt registers (`known-problems.md`). |
