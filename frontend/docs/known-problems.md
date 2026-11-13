@@ -34,8 +34,6 @@ Do not fix these while doing other work. Do not make them worse. Fix them only i
 |---|---|---|
 | `components/setup/ScheduleMatchForm.tsx` | 449 | < 150 (max 250) |
 | `features/scoring/pages/ScorerConsolePage.tsx` | 433 | < 150 (max 250) |
-| `pages/ScorerConsole.tsx` (legacy) | 415 | < 150 (max 250) |
-| `pages/Home.tsx` (legacy) | 351 | < 150 (max 250) |
 | `components/scorer/DeliveryKeypad.tsx` | 351 | < 150 (max 250) |
 | `hooks/useScorerActions.ts` | 337 | < 200 |
 | `features/dashboard/pages/DashboardOverviewPage.tsx` | 290 | < 150 (max 250) |
