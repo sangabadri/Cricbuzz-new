@@ -70,12 +70,9 @@ class MatchService:
         if not team_b:
             raise EntityNotFoundError(f"Team with ID {match_in.team_b} does not exist")
 
-        if creator_id is not None:
-            match = await self.match_repo.create(match_in, created_by=creator_id)
-            if self.match_access_repo:
-                await self.match_access_repo.grant_access(match.id, creator_id, MatchUserRole.OWNER)
-        else:
-            match = await self.match_repo.create(match_in)
+        match = await self.match_repo.create(match_in)
+        if creator_id is not None and self.match_access_repo:
+            await self.match_access_repo.grant_access(match.id, creator_id, MatchUserRole.OWNER)
         if team_a and hasattr(team_a, "name") and isinstance(team_a.name, str):
             setattr(match, "team_a_name", team_a.name)
         if team_b and hasattr(team_b, "name") and isinstance(team_b.name, str):

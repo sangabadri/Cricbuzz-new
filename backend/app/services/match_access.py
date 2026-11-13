@@ -1,6 +1,8 @@
+from fastapi import HTTPException, status
 from app.domain.enums import MatchUserRole
 from app.domain.exceptions import EntityNotFoundError, RuleViolationError
 from app.models.match_access import MatchAccess
+from app.models.user import User
 from app.repositories.match import MatchRepository
 from app.repositories.match_access import MatchAccessRepository
 from app.repositories.user import UserRepository
@@ -82,3 +84,50 @@ class MatchAccessService:
         if not revoked:
             raise EntityNotFoundError("Access grant not found")
         return True
+
+    async def authorize_match_access(
+        self,
+        match_id: int,
+        user: User | None,
+        allowed_roles: list[MatchUserRole],
+    ) -> User | None:
+        """
+        Consolidated authorization decision for match mutation operations.
+        Executes exactly 1 database round-trip via MatchAccessRepository.get_match_auth_context.
+        """
+        context = await self.match_access_repo.get_match_auth_context(
+            match_id=match_id,
+            user_id=user.id if user else None,
+        )
+        if not context.match_exists:
+            # Let the endpoint itself handle 404 EntityNotFoundError
+            return user
+
+        # Legacy / unassigned match compatibility:
+        # If no access entries exist for this match, permit open access (historical fixtures & tests)
+        if not context.has_access_records:
+            return user
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required for this match",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        if getattr(user, "is_superuser", False):
+            return user
+
+        if context.user_role == MatchUserRole.OWNER or (context.user_role and context.user_role in allowed_roles):
+            return user
+
+        if context.user_role is not None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have the required role for this match",
+            )
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to modify this match",
+        )

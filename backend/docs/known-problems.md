@@ -7,39 +7,17 @@ Do not fix these while doing other work. Do not make them worse. Fix them only i
 
 The auth and match access implementation introduced architectural boundary violations, concurrency hazards, and semantic mismatches across layers:
 
-### A. Layer Inversion & Business Logic in `app/api/deps.py` (Responsibility Violation)
-- `api/deps.py` is reserved strictly for wiring dependencies. `require_match_access` violates this by acting as an ad-hoc query engine and business rules layer:
-  - Executes raw database queries across `MatchRepository` and `MatchAccessRepository`.
-  - Reaches through private service attributes (`match_service.match_repo`).
-  - Sniffs and parses unvalidated ASGI request path parameters (`request.path_params`).
-  - Enforces domain fallback rules (legacy match detection) and raises `HTTPException(401/403)` directly inside DI wiring.
-- **Remediation**: Move authorization logic into a dedicated `AuthorizationService` or clean FastAPI security dependencies; pass typed route parameters instead of inspecting `request.path_params`.
+### A. [RESOLVED - 2026-11-13] Layer Inversion & Business Logic in `app/api/deps.py` (Responsibility Violation)
+- Resolved: Authorization decision extracted into `MatchAccessService.authorize_match_access`. `api/deps.py` no longer executes SQL queries or evaluates domain fallback rules directly.
 
-### B. N+1 Database Query Overhead on Every Scored Ball (Performance / Complexity)
-- `require_match_access` executes up to 3 separate database queries on every single mutation endpoint before the service method is reached:
-  1. `match_repo.get_by_id(match_id)`
-  2. `match_access_repo.list_for_match(match_id)` (fetches all access records joined with `users` solely to check `not records`)
-  3. `match_access_repo.get_user_match_role(match_id, user_id)`
-- Under live scoring, this adds severe database latency to ball-by-ball updates.
-- **Remediation**: Consolidate match existence, creator verification, and user role lookup into a single indexed query; eliminate loading all match access records.
+### B. [RESOLVED - 2026-11-13] N+1 Database Query Overhead on Every Scored Ball (Performance / Complexity)
+- Resolved: Consolidated match existence, role lookup, and access record existence checks into a single index-seek query in `MatchAccessRepository.get_match_auth_context()`.
 
-### C. Fail-Open Security Vulnerability in Parameter Parsing (Correctness / Security)
-- In `require_match_access`:
-  ```python
-  match_id_str = request.path_params.get("id") or request.path_params.get("match_id")
-  if not match_id_str:
-      return current_user
-  ```
-  If an endpoint uses a path parameter other than `"id"` or `"match_id"`, or if parsing raises a `ValueError`, the guard silently catches the error and returns `current_user`, granting unauthorized access (failing open instead of closed).
-- **Remediation**: Fail closed with `HTTP 400/403` on missing or unparseable match ID parameters.
+### C. [RESOLVED - 2026-11-13] Fail-Open Security Vulnerability in Parameter Parsing (Correctness / Security)
+- Resolved: `require_match_access` now fails closed, raising `HTTPException(400)` if match path parameter is missing or non-integer.
 
-### D. Dual Source of Truth & Cascade Privilege Drop (Extensibility / Correctness)
-- Match ownership is duplicated across two locations:
-  1. `matches.created_by` (Foreign Key on `matches` table)
-  2. `match_access` table with `role = MatchUserRole.OWNER`
-- Calling `grant_match_access` with `role = OWNER` does not update `matches.created_by`.
-- Foreign key mismatch: `matches.created_by` uses `ondelete="SET NULL"`, while `match_access.user_id` uses `ondelete="CASCADE"`. If an owner user is deleted, their `match_access` row is deleted, and `match.created_by` becomes `None`. Because `records` is now empty, `require_match_access` treats the match as a legacy unassigned match, silently converting a private match into an unprotected public match.
-- **Remediation**: Establish a single source of truth for match ownership (preferably the access table) and fix cascade behavior.
+### D. [RESOLVED - 2026-11-13] Dual Source of Truth & Cascade Privilege Drop (Extensibility / Correctness)
+- Resolved per ADR 0007: Removed `created_by` column from `Match` model completely, keeping `Match` pure cricket domain data. Canonical ownership resides solely in `match_access` with `role = MatchUserRole.OWNER`.
 
 ### E. Semantic Misappropriation of `CricketDomainError` for Auth (Consistency / HTTP Contract)
 - `AuthService.login`, `register`, and `refresh_tokens` raise `RuleViolationError` for invalid passwords, duplicate usernames, and expired tokens.
@@ -52,14 +30,11 @@ The auth and match access implementation introduced architectural boundary viola
 - `AuthService.refresh_tokens` does not track revoked tokens. Once issued, a refresh token remains valid for 7 days even if the user logs out, rotates tokens, or changes passwords.
 - **Remediation**: Persist active refresh token `jti`s in the database or Redis to enforce genuine token revocation upon logout and rotation.
 
-### G. Inconsistent Route Path Parameters (Consistency)
-- Mutation routers inconsistently define path parameters: `/matches/{match_id}/deliveries` vs `/matches/{id}/access`.
-- **Remediation**: Standardize all routes to `/matches/{match_id}/...`.
+### G. [RESOLVED - 2026-11-13] Inconsistent Route Path Parameters (Consistency)
+- Resolved: Standardized route paths to `/matches/{match_id}/access` and route parameter names to `match_id: int`.
 
-### H. Tight Coupling in `MatchService` (Extensibility / Coupling)
-- `MatchService` injects `MatchAccessRepository` in its constructor and assigns `OWNER` role inside `create_match`.
-- `deps.py` extracts `match_service.match_repo` directly to construct `MatchAccessService`.
-- **Remediation**: Decouple match creation from access assignment using an orchestrating service or domain event handler; inject repositories cleanly in DI.
+### H. [RESOLVED - 2026-11-13] Tight Coupling in `MatchService` (Extensibility / Coupling)
+- Resolved: Decoupled `MatchRepository` injection in `deps.py` via `get_match_repo()`; eliminated private attribute extraction `match_service.match_repo`.
 
 ### I. Correlated Error in Auth Test Suite (Testability)
 - `tests/e2e/test_auth_and_access_e2e.py` and `tests/unit/test_auth_service.py` assert `status_code == 400` on invalid password login. The tests pass because they encode the implementation defect rather than the true HTTP requirement.

@@ -11,6 +11,7 @@ Never rewrite an old record. Replace it with a new one.
 | 0004 | Domain errors become HTTP answers in one place | Accepted |
 | 0005 | Auth & match access architectural debt status | Accepted |
 | 0006 | Frontend: feature folders, server data via TanStack Query | Accepted |
+| 0007 | Canonical Match Ownership in MatchAccess (Single Source of Truth) | Accepted |
 
 Records 0001 to 0004 describe what the code already does (checked against the code on 2026-11-12).
 If code and record disagree, report it. Do not "fix" either side silently.

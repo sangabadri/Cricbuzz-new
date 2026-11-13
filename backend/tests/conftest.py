@@ -21,12 +21,14 @@ from app.schemas.innings import InningsCreate
 from app.schemas.match import MatchCreate
 from app.schemas.player import PlayerCreate
 from app.schemas.squad import SquadCreate
+from app.repositories.match_access import MatchAuthContext
 from app.api.deps import (
     get_auth_service,
     get_delivery_service,
     get_innings_service,
     get_match_access_repo,
     get_match_access_service,
+    get_match_repo,
     get_match_service,
     get_player_service,
     get_scorecard_service,
@@ -220,6 +222,27 @@ class InMemoryUserRepository:
 class InMemoryMatchAccessRepository:
     def __init__(self, store: InMemoryStore):
         self.store = store
+
+    async def get_match_auth_context(self, match_id: int, user_id: int | None = None) -> MatchAuthContext:
+        match = self.store.matches.get(match_id)
+        if not match:
+            return MatchAuthContext(
+                match_exists=False,
+                user_role=None,
+                has_access_records=False,
+            )
+        user_role = None
+        has_access_records = False
+        for a in self.store.match_access:
+            if a.match_id == match_id:
+                has_access_records = True
+                if user_id is not None and a.user_id == user_id:
+                    user_role = a.role
+        return MatchAuthContext(
+            match_exists=True,
+            user_role=user_role,
+            has_access_records=has_access_records,
+        )
 
     async def get_user_match_role(self, match_id: int, user_id: int) -> MatchUserRole | None:
         for a in self.store.match_access:
@@ -538,6 +561,9 @@ def test_client(in_memory_store, bypass_startup_lifespan):
     async def _match():
         return match_service
 
+    async def _match_r():
+        return match_repo
+
     async def _squad():
         return squad_service
 
@@ -564,6 +590,7 @@ def test_client(in_memory_store, bypass_startup_lifespan):
 
     app.dependency_overrides[get_team_service] = _team
     app.dependency_overrides[get_player_service] = _player
+    app.dependency_overrides[get_match_repo] = _match_r
     app.dependency_overrides[get_match_service] = _match
     app.dependency_overrides[get_squad_service] = _squad
     app.dependency_overrides[get_innings_service] = _innings
