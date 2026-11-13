@@ -21,10 +21,8 @@ Do not fix these while doing other work. Do not make them worse. Fix them only i
 - 7-day refresh tokens are stored in `localStorage` (`cricbuzz_refresh_token`), exposing long-lived credentials to cross-site scripting (XSS) vectors.
 - **Remediation**: Transition to `httpOnly`, `SameSite=Strict` secure cookies for refresh tokens.
 
-### F. Duplicate API Client Files (Consistency)
-- `src/api/client.ts` (329 lines) implements the Axios client, token helpers, and API methods.
-- `src/lib/api/client.ts` is an orphan 1-line re-export stub (`export * from '../../api/client'`).
-- **Remediation**: Consolidate API client into `src/lib/api-client.ts` per `folder-map.md` and eliminate duplicate entrypoints.
+### F. [RESOLVED - 2026-11-13] Duplicate API Client Files (Consistency)
+- Resolved in Slice E: Consolidated API client into single canonical `src/lib/api-client.ts` and test into `src/lib/__tests__/api-client.test.ts`. Completely removed orphan stub `src/lib/api/client.ts` and legacy `src/api/` directory. All 38 consumers updated.
 
 ---
 
