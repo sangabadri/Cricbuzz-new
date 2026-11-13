@@ -50,29 +50,53 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+let refreshPromise: Promise<string | null> | null = null;
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
+    if (
+      error.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !originalRequest.url?.includes('/auth/refresh')
+    ) {
       originalRequest._retry = true;
-      const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('cricbuzz_refresh_token') : null;
-      if (refreshToken) {
-        try {
-          const res = await axios.post<TokenResponse>(
-            `${api.defaults.baseURL}/auth/refresh`,
-            { refresh_token: refreshToken }
-          );
-          currentAccessToken = res.data.access_token;
-          localStorage.setItem('cricbuzz_refresh_token', res.data.refresh_token);
-          if (originalRequest.headers) {
-            originalRequest.headers.Authorization = `Bearer ${currentAccessToken}`;
+      const refreshToken =
+        typeof window !== 'undefined' ? localStorage.getItem('cricbuzz_refresh_token') : null;
+      if (!refreshToken) {
+        return Promise.reject(error);
+      }
+
+      if (!refreshPromise) {
+        refreshPromise = (async () => {
+          try {
+            const res = await axios.post<TokenResponse>(
+              `${api.defaults.baseURL}/auth/refresh`,
+              { refresh_token: refreshToken }
+            );
+            currentAccessToken = res.data.access_token;
+            localStorage.setItem('cricbuzz_refresh_token', res.data.refresh_token);
+            return currentAccessToken;
+          } catch (refreshErr) {
+            currentAccessToken = null;
+            localStorage.removeItem('cricbuzz_refresh_token');
+            throw refreshErr;
+          } finally {
+            refreshPromise = null;
           }
-          return api(originalRequest);
-        } catch {
-          currentAccessToken = null;
-          localStorage.removeItem('cricbuzz_refresh_token');
+        })();
+      }
+
+      try {
+        const newAccessToken = await refreshPromise;
+        if (originalRequest.headers && newAccessToken) {
+          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
         }
+        return api(originalRequest);
+      } catch {
+        return Promise.reject(error);
       }
     }
     return Promise.reject(error);

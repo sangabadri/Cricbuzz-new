@@ -5,13 +5,8 @@ Do not fix these while doing other work. Do not make them worse. Fix them only i
 
 ## 1. High-Priority Architecture & Build Issues
 
-### A. Broken TypeScript Production Build (Correctness / Build Pipeline)
-- `npm run build` (`tsc -b && vite build`) currently fails with:
-  ```
-  src/features/authentication/__tests__/AuthContext.test.tsx(14,7): error TS2698: Spread types may only be created from object types.
-  ```
-  In `AuthContext.test.tsx`, `await vi.importActual(...)` returns `unknown`, causing the object spread `...actual` to fail TypeScript compilation.
-- **Remediation**: Type the mock import properly: `await vi.importActual<Record<string, unknown>>(...)` or type cast `(actual as any).cricketApi`.
+### A. [RESOLVED - 2026-11-13] Broken TypeScript Production Build (Correctness / Build Pipeline)
+- Resolved in commit `70f1bf9`: Added explicit `vi.importActual<typeof import(...)>` type parameter in `AuthContext.test.tsx`. `npm run build` is 100% green.
 
 ### B. Split-Brain Frontend: Parallel Duplicate Codebases (Complexity / Architectural Drift)
 - The codebase currently contains two parallel page implementations:
@@ -26,17 +21,8 @@ Do not fix these while doing other work. Do not make them worse. Fix them only i
 - This violates the feature modularity rule: features should only import UI primitives from `components/ui/` or shared helpers from `lib/`.
 - **Remediation**: Move match-center tab components inside `src/features/matches/components/`.
 
-### D. Concurrent 401 Refresh Token Stampede (Correctness / Concurrency)
-- In `src/api/client.ts`, the Axios response interceptor intercepts HTTP 401 errors:
-  ```typescript
-  if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
-    originalRequest._retry = true;
-    ...
-    await axios.post(`${api.defaults.baseURL}/auth/refresh`, { refresh_token });
-  ```
-- Because `_retry` is scoped to a single request, when a page loads and fires 3–4 simultaneous queries (e.g., live ticker, scorecard, commentary) that all return 401, all 4 queries simultaneously initiate separate `POST /auth/refresh` requests.
-- Since refresh tokens rotate upon use, only the first request succeeds. The subsequent concurrent refresh calls fail, hit the `catch` block, clear `localStorage.removeItem('cricbuzz_refresh_token')`, and prematurely log the user out.
-- **Remediation**: Introduce a promise-queueing mechanism in Axios to ensure only one token refresh runs at a time, holding other requests until resolved.
+### D. [RESOLVED - 2026-11-13] Concurrent 401 Refresh Token Stampede (Correctness / Concurrency)
+- Resolved in `src/api/client.ts`: Introduced in-flight `refreshPromise` coalescing with Promise chaining and `/auth/refresh` recursion prevention. Added 4 unit tests in `src/api/__tests__/client.test.ts`.
 
 ### E. Insecure Refresh Token Storage (Security)
 - 7-day refresh tokens are stored in `localStorage` (`cricbuzz_refresh_token`), exposing long-lived credentials to cross-site scripting (XSS) vectors.
