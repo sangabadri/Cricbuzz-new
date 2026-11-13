@@ -10,7 +10,7 @@ import type { SquadResponse } from '../../types/cricket';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useScorerActions } from '../../hooks/useScorerActions';
 import * as useScorerModule from '../../hooks/useScorer';
-import { ScorerConsole } from '../../pages/ScorerConsole';
+import { ScorerConsolePage as ScorerConsole } from '../../features/scoring/pages/ScorerConsolePage';
 
 const mockSquad: SquadResponse = {
   id: 1,
@@ -306,12 +306,22 @@ describe('Stage 2 Architecture: Modal Form Encapsulation & API Client', () => {
         isAwardingMOM: false,
       });
 
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: {
+            retry: false,
+          },
+        },
+      });
+
       const { rerender, unmount } = render(
-        <MemoryRouter initialEntries={['/matches/1/scorer']}>
-          <Routes>
-            <Route path="/matches/:id/scorer" element={<ScorerConsole />} />
-          </Routes>
-        </MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/matches/1/scorer']}>
+            <Routes>
+              <Route path="/matches/:id/scorer" element={<ScorerConsole />} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
       );
 
       // Listener attached exactly once on mount
@@ -320,18 +330,22 @@ describe('Stage 2 Architecture: Modal Form Encapsulation & API Client', () => {
 
       // Re-render multiple times
       rerender(
-        <MemoryRouter initialEntries={['/matches/1/scorer']}>
-          <Routes>
-            <Route path="/matches/:id/scorer" element={<ScorerConsole />} />
-          </Routes>
-        </MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/matches/1/scorer']}>
+            <Routes>
+              <Route path="/matches/:id/scorer" element={<ScorerConsole />} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
       );
       rerender(
-        <MemoryRouter initialEntries={['/matches/1/scorer']}>
-          <Routes>
-            <Route path="/matches/:id/scorer" element={<ScorerConsole />} />
-          </Routes>
-        </MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/matches/1/scorer']}>
+            <Routes>
+              <Route path="/matches/:id/scorer" element={<ScorerConsole />} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
       );
 
       // Verify zero removal/re-addition churn across re-renders

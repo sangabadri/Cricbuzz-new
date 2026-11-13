@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MatchCenter } from '../../pages/MatchCenter';
+import { MatchDetailPage as MatchCenter } from '../../features/matches/pages/MatchDetailPage';
 import { MatchCenterHero } from '../../features/matches/components/MatchCenterHero';
 import { CreaseTab } from '../../features/matches/components/CreaseTab';
 import { ScorecardTab } from '../../features/matches/components/ScorecardTab';

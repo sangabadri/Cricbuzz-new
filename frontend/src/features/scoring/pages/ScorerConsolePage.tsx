@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Clock,
   PlayCircle,
+  RotateCcw,
   Shield,
   Trophy,
   UserPlus,
@@ -133,19 +134,25 @@ export const ScorerConsolePage: React.FC = () => {
       if (['0', '1', '2', '3', '4', '6'].includes(e.key)) {
         e.preventDefault();
         handleRuns(Number(e.key));
-      } else if (e.key.toLowerCase() === 'w') {
-        e.preventDefault();
-        setShowWicketModal(true);
-      } else if (e.key.toLowerCase() === 'd') {
+      } else if (e.key === 'w' || e.key === 'W') {
         e.preventDefault();
         handleExtra('wide', 1);
-      } else if (e.key.toLowerCase() === 'n') {
+      } else if (e.key === 'n' || e.key === 'N') {
         e.preventDefault();
         handleExtra('noball', 1);
-      } else if (e.key.toLowerCase() === 's') {
+      } else if (e.key === 'l' || e.key === 'L') {
+        e.preventDefault();
+        handleExtra('leg-bye', 1);
+      } else if (e.key === 'b' || e.key === 'B') {
+        e.preventDefault();
+        handleExtra('bye', 1);
+      } else if (e.key === 'k' || e.key === 'K') {
+        e.preventDefault();
+        setShowWicketModal(true);
+      } else if (e.key === 's' || e.key === 'S') {
         e.preventDefault();
         handleSwapStrike();
-      } else if (e.key.toLowerCase() === 'u') {
+      } else if (e.key === 'u' || e.key === 'U') {
         e.preventDefault();
         handleUndoDelivery();
       }
@@ -167,21 +174,35 @@ export const ScorerConsolePage: React.FC = () => {
     );
   }
 
-  if (isStateError) {
+  if (isStateError || (!isStateLoading && !scorerState)) {
     return (
-      <div className="max-w-md mx-auto my-12 p-6 bg-[#161b22] border border-rose-500/40 rounded-2xl text-center space-y-4">
-        <AlertCircle className="w-10 h-10 text-rose-500 mx-auto" />
-        <h2 className="text-xl font-bold text-white">Error Connecting to Match</h2>
-        <p className="text-slate-400 text-xs">
-          Unable to synchronize scorer console state with backend.
-        </p>
-        <div className="flex justify-center gap-3 pt-2">
-          <Button variant="primary" size="sm" onClick={() => refetchState()}>
-            Retry
+      <div className="max-w-2xl mx-auto my-12 p-6 lg:p-8 bg-[#161b22] border border-rose-500/30 rounded-2xl shadow-2xl text-center space-y-4">
+        <div className="w-12 h-12 mx-auto rounded-full bg-rose-500/15 border border-rose-500/40 flex items-center justify-center">
+          <AlertCircle className="w-6 h-6 text-rose-400" />
+        </div>
+        <div className="space-y-1">
+          <h2 className="text-lg font-black text-white">Failed to load scorer state</h2>
+          <p className="text-slate-400 text-xs max-w-md mx-auto">
+            Unable to connect to match #{matchId} scorer engine or match does not exist.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => refetchState()}
+            leftIcon={<RotateCcw className="w-3.5 h-3.5" />}
+          >
+            Retry Scorer Connection
           </Button>
           <Link to={`/matches/${matchId}`}>
             <Button variant="secondary" size="sm">
               Match Center
+            </Button>
+          </Link>
+          <Link to="/">
+            <Button variant="outline" size="sm">
+              Fixtures
             </Button>
           </Link>
         </div>

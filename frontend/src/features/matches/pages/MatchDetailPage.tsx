@@ -103,7 +103,7 @@ export const MatchDetailPage: React.FC = () => {
           <AlertCircle className="w-6 h-6" />
         </div>
         <div>
-          <h2 className="text-xl font-black text-white">Live Match Unavailable</h2>
+          <h2 className="text-xl font-black text-white">Failed to load match data</h2>
           <p className="text-slate-400 text-xs max-w-md mx-auto mt-1">
             We couldn't connect to the match server. Check your connection or retry.
           </p>
@@ -117,7 +117,7 @@ export const MatchDetailPage: React.FC = () => {
           >
             Retry Connection
           </Button>
-          <Link to="/matches">
+          <Link to="/">
             <Button variant="secondary" size="sm">
               Return to Matches
             </Button>

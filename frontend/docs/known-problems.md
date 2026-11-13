@@ -8,18 +8,11 @@ Do not fix these while doing other work. Do not make them worse. Fix them only i
 ### A. [RESOLVED - 2026-11-13] Broken TypeScript Production Build (Correctness / Build Pipeline)
 - Resolved in commit `70f1bf9`: Added explicit `vi.importActual<typeof import(...)>` type parameter in `AuthContext.test.tsx`. `npm run build` is 100% green.
 
-### B. Split-Brain Frontend: Parallel Duplicate Codebases (Complexity / Architectural Drift)
-- The codebase currently contains two parallel page implementations:
-  1. Legacy pages: `src/pages/` (`Home.tsx`, `MatchCenter.tsx`, `ScorerConsole.tsx`, `SetupWizard.tsx`).
-  2. Bulletproof feature pages: `src/features/` (`features/home/pages/HomePage.tsx`, `features/matches/pages/MatchDetailPage.tsx`, `features/scoring/pages/ScorerConsolePage.tsx`, etc.).
-- **The Problem**: `AppRouter` in `src/app/router/index.tsx` mounts the new `features/*` pages. However, the existing unit tests in `src/test/__tests__/` still target the legacy unmounted components in `src/pages/` and `src/components/match/*`.
-- Changes to live screens will not be tested by existing test suites, and fixes to tested legacy files will have no effect on live users.
-- **Remediation**: Execute a phased migration task to retire legacy `src/pages/`, re-point test suites to feature components, and align with `folder-map.md`.
+### B. [RESOLVED - 2026-11-13] Split-Brain Frontend: Parallel Duplicate Codebases (Complexity / Architectural Drift)
+- Resolved in Slice C: Retired legacy `src/pages/` (`Home.tsx`, `MatchCenter.tsx`, `ScorerConsole.tsx`, `SetupWizard.tsx`), extracted `FixtureCard` to `features/matches/components/`, moved `SetupWizard` to `features/match-management/components/`, and repointed all test suites in `src/test/__tests__/` to mount live feature components in `src/features/`.
 
-### C. Feature Boundary Leaks in `MatchDetailPage.tsx` (Responsibility / Boundary Violation)
-- `src/features/matches/pages/MatchDetailPage.tsx` imports private tab implementations directly from `src/components/match/` (`MatchCenterHero`, `CreaseTab`, `ScorecardTab`, `SquadsTab`, `CommentaryTab`, `CommentaryFeed`).
-- This violates the feature modularity rule: features should only import UI primitives from `components/ui/` or shared helpers from `lib/`.
-- **Remediation**: Move match-center tab components inside `src/features/matches/components/`.
+### C. [RESOLVED - 2026-11-13] Feature Boundary Leaks in `MatchDetailPage.tsx` (Responsibility / Boundary Violation)
+- Resolved in Slice C: Moved match-center tab components and tests from `src/components/match/` into `src/features/matches/components/` and deleted obsolete `components/match/` directory. Updated `MatchDetailPage` and `ScorerConsolePage` to import locally.
 
 ### D. [RESOLVED - 2026-11-13] Concurrent 401 Refresh Token Stampede (Correctness / Concurrency)
 - Resolved in `src/api/client.ts`: Introduced in-flight `refreshPromise` coalescing with Promise chaining and `/auth/refresh` recursion prevention. Added 4 unit tests in `src/api/__tests__/client.test.ts`.
