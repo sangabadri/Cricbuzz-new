@@ -26,6 +26,10 @@ describe('API Client Environment & Configuration', () => {
     expect(api.defaults.headers['Content-Type']).toBe('application/json');
   });
 
+  it('configures default withCredentials to true for secure httpOnly cookie exchange', () => {
+    expect(api.defaults.withCredentials).toBe(true);
+  });
+
   it('dynamically respects VITE_API_URL override when defined', async () => {
     vi.resetModules();
     vi.stubEnv('VITE_API_URL', 'https://production-cricbuzz.internal/api/v1');
@@ -170,7 +174,6 @@ describe('API Client Environment & Configuration', () => {
   });
 
   it('coalesces multiple concurrent 401 errors into a single refresh request', async () => {
-    localStorage.setItem('cricbuzz_refresh_token', 'initial-refresh-token');
     const postSpy = vi.spyOn(axios, 'post').mockResolvedValueOnce({
       data: {
         access_token: 'new-access-token-999',
@@ -212,9 +215,10 @@ describe('API Client Environment & Configuration', () => {
     expect(postSpy).toHaveBeenCalledTimes(1);
     expect(postSpy).toHaveBeenCalledWith(
       expect.stringContaining('/auth/refresh'),
-      { refresh_token: 'initial-refresh-token' }
+      {},
+      { withCredentials: true }
     );
-    expect(localStorage.getItem('cricbuzz_refresh_token')).toBe('rotated-refresh-token-000');
+    expect(localStorage.getItem('cricbuzz_refresh_token')).toBeNull();
     expect(getAccessToken()).toBe('new-access-token-999');
     expect(res1.data.success).toBe(true);
     expect(res2.data.success).toBe(true);
@@ -222,7 +226,6 @@ describe('API Client Environment & Configuration', () => {
   });
 
   it('clears session and rejects all concurrent requests when refresh fails with 401', async () => {
-    localStorage.setItem('cricbuzz_refresh_token', 'expired-refresh-token');
     const authError = new axios.AxiosError('Unauthorized', '401', undefined, undefined, {
       status: 401,
       statusText: 'Unauthorized',
@@ -251,12 +254,11 @@ describe('API Client Environment & Configuration', () => {
     expect(postSpy).toHaveBeenCalledTimes(1);
     expect(results[0].status).toBe('rejected');
     expect(results[1].status).toBe('rejected');
-    expect(localStorage.getItem('cricbuzz_refresh_token')).toBeNull();
     expect(getAccessToken()).toBeNull();
   });
 
-  it('preserves refresh token in localStorage when refresh fails due to transient network error', async () => {
-    localStorage.setItem('cricbuzz_refresh_token', 'valid-refresh-token');
+  it('preserves access token in memory when refresh fails due to transient network error', async () => {
+    setAccessToken('valid-access-token');
     const networkError = new axios.AxiosError('Network Error', 'ERR_NETWORK');
     const postSpy = vi.spyOn(axios, 'post').mockRejectedValueOnce(networkError);
 
@@ -273,11 +275,10 @@ describe('API Client Environment & Configuration', () => {
 
     await expect(api.get('/matches/')).rejects.toThrow();
     expect(postSpy).toHaveBeenCalledTimes(1);
-    expect(localStorage.getItem('cricbuzz_refresh_token')).toBe('valid-refresh-token');
+    expect(getAccessToken()).toBe('valid-access-token');
   });
 
   it('coalesces direct cricketApi.refreshToken calls with concurrent 401 interceptor queries', async () => {
-    localStorage.setItem('cricbuzz_refresh_token', 'hydration-refresh-token');
     const postSpy = vi.spyOn(axios, 'post').mockResolvedValueOnce({
       data: {
         access_token: 'hydrated-access-token',
@@ -310,7 +311,7 @@ describe('API Client Environment & Configuration', () => {
     };
 
     const [directRefresh, interceptedQuery] = await Promise.all([
-      cricketApi.refreshToken('hydration-refresh-token'),
+      cricketApi.refreshToken(),
       api.get('/matches/'),
     ]);
 
@@ -322,7 +323,6 @@ describe('API Client Environment & Configuration', () => {
 
   it('retries straggler 401 requests immediately when token was already refreshed by earlier request', async () => {
     setAccessToken('stale-token');
-    localStorage.setItem('cricbuzz_refresh_token', 'current-refresh-token');
     const postSpy = vi.spyOn(axios, 'post');
 
     let adapterCalls = 0;
@@ -357,7 +357,6 @@ describe('API Client Environment & Configuration', () => {
   });
 
   it('does not attempt token refresh when /auth/refresh returns 401', async () => {
-    localStorage.setItem('cricbuzz_refresh_token', 'bad-refresh-token');
     const postSpy = vi.spyOn(axios, 'post');
 
     api.defaults.adapter = async (config) => {
@@ -375,22 +374,13 @@ describe('API Client Environment & Configuration', () => {
     expect(postSpy).not.toHaveBeenCalled();
   });
 
-  it('rejects 401 immediately without refresh when no refresh token in localStorage', async () => {
-    localStorage.clear();
-    const postSpy = vi.spyOn(axios, 'post');
+  it('verifies cricketApi.logout calls /auth/logout and clears in-memory access token', async () => {
+    setAccessToken('active-token-before-logout');
+    const spy = vi.spyOn(api, 'post').mockResolvedValueOnce({ data: { message: 'Successfully logged out' } });
 
-    api.defaults.adapter = async (config) => {
-      const error = new axios.AxiosError('Unauthorized', '401', config, undefined, {
-        status: 401,
-        statusText: 'Unauthorized',
-        headers: {},
-        config,
-        data: { detail: 'No auth' },
-      });
-      return Promise.reject(error);
-    };
+    await cricketApi.logout();
 
-    await expect(api.get('/auth/me')).rejects.toThrow();
-    expect(postSpy).not.toHaveBeenCalled();
+    expect(spy).toHaveBeenCalledWith('/auth/logout');
+    expect(getAccessToken()).toBeNull();
   });
 });

@@ -41,6 +41,7 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,
 });
 
 api.interceptors.request.use((config) => {
@@ -53,32 +54,22 @@ api.interceptors.request.use((config) => {
 let refreshPromise: Promise<TokenResponse> | null = null;
 
 export async function requestTokenRefresh(token?: string): Promise<TokenResponse> {
-  const refreshToken =
-    token || (typeof window !== 'undefined' ? localStorage.getItem('cricbuzz_refresh_token') : null);
-  if (!refreshToken) {
-    throw new Error('No refresh token available');
-  }
-
   if (!refreshPromise) {
     refreshPromise = (async () => {
       try {
+        const payload = token ? { refresh_token: token } : {};
         const res = await axios.post<TokenResponse>(
           `${api.defaults.baseURL}/auth/refresh`,
-          { refresh_token: refreshToken }
+          payload,
+          { withCredentials: true }
         );
         currentAccessToken = res.data.access_token;
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('cricbuzz_refresh_token', res.data.refresh_token);
-        }
         return res.data;
       } catch (refreshErr) {
         const status = axios.isAxiosError(refreshErr) ? refreshErr.response?.status : undefined;
         // Only invalidate local session on explicit auth rejections (400, 401, 403), not transient network/server faults
         if (status === 400 || status === 401 || status === 403) {
           currentAccessToken = null;
-          if (typeof window !== 'undefined') {
-            localStorage.removeItem('cricbuzz_refresh_token');
-          }
         }
         throw refreshErr;
       } finally {
@@ -111,14 +102,8 @@ api.interceptors.response.use(
         return api(originalRequest);
       }
 
-      const refreshToken =
-        typeof window !== 'undefined' ? localStorage.getItem('cricbuzz_refresh_token') : null;
-      if (!refreshToken) {
-        return Promise.reject(error);
-      }
-
       try {
-        const tokenData = await requestTokenRefresh(refreshToken);
+        const tokenData = await requestTokenRefresh();
         if (originalRequest.headers && tokenData.access_token) {
           originalRequest.headers.Authorization = `Bearer ${tokenData.access_token}`;
         }
@@ -355,8 +340,16 @@ export const cricketApi = {
     return res.data;
   },
 
-  refreshToken: async (refreshToken: string): Promise<TokenResponse> => {
+  refreshToken: async (refreshToken?: string): Promise<TokenResponse> => {
     return requestTokenRefresh(refreshToken);
+  },
+
+  logout: async (): Promise<void> => {
+    try {
+      await api.post('/auth/logout');
+    } finally {
+      currentAccessToken = null;
+    }
   },
 
   getCurrentUser: async (): Promise<User> => {

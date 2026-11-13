@@ -15,6 +15,7 @@ from app.repositories.player import PlayerRepository
 from app.repositories.squad import SquadRepository
 from app.repositories.team import TeamRepository
 from app.repositories.user import UserRepository
+from app.repositories.refresh_token import RefreshTokenRepository
 from app.services.auth import AuthService
 from app.services.delivery import DeliveryService
 from app.services.innings import InningsService
@@ -48,6 +49,10 @@ async def get_match_repo(session: AsyncSession = Depends(get_db)) -> MatchReposi
 
 async def get_user_repo(session: AsyncSession = Depends(get_db)) -> UserRepository:
     return UserRepository(session)
+
+
+async def get_refresh_token_repo(session: AsyncSession = Depends(get_db)) -> RefreshTokenRepository:
+    return RefreshTokenRepository(session)
 
 
 async def get_match_access_repo(session: AsyncSession = Depends(get_db)) -> MatchAccessRepository:
@@ -96,8 +101,11 @@ async def get_scorecard_service(session: AsyncSession = Depends(get_db)) -> Scor
     return ScorecardService(match_repo, innings_repo, delivery_repo, player_repo, team_repo)
 
 
-async def get_auth_service(user_repo: UserRepository = Depends(get_user_repo)) -> AuthService:
-    return AuthService(user_repo)
+async def get_auth_service(
+    user_repo: UserRepository = Depends(get_user_repo),
+    refresh_token_repo: RefreshTokenRepository = Depends(get_refresh_token_repo),
+) -> AuthService:
+    return AuthService(user_repo, refresh_token_repo)
 
 
 async def get_match_access_service(

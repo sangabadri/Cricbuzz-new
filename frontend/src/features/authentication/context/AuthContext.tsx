@@ -8,7 +8,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (credentials: LoginCredentials) => Promise<void>;
   register: (credentials: RegisterCredentials) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -17,45 +17,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const logout = useCallback(() => {
-    setAccessToken(null);
-    localStorage.removeItem('cricbuzz_refresh_token');
-    setUser(null);
+  const logout = useCallback(async () => {
+    try {
+      await cricketApi.logout();
+    } catch {
+      // Ignore network errors on logout
+    } finally {
+      setAccessToken(null);
+      setUser(null);
+    }
   }, []);
 
   const login = useCallback(async (credentials: LoginCredentials) => {
     const data = await cricketApi.login(credentials);
     setAccessToken(data.access_token);
-    localStorage.setItem('cricbuzz_refresh_token', data.refresh_token);
     setUser(data.user);
   }, []);
 
   const register = useCallback(async (credentials: RegisterCredentials) => {
     const data = await cricketApi.register(credentials);
     setAccessToken(data.access_token);
-    localStorage.setItem('cricbuzz_refresh_token', data.refresh_token);
     setUser(data.user);
   }, []);
 
-  // Hydrate session on load using refresh token
+  // Hydrate session on load using httpOnly cookie refresh exchange
   useEffect(() => {
     let mounted = true;
     async function hydrate() {
-      const storedRefresh = localStorage.getItem('cricbuzz_refresh_token');
-      if (!storedRefresh) {
-        if (mounted) setIsLoading(false);
-        return;
-      }
       try {
-        const data = await cricketApi.refreshToken(storedRefresh);
+        const data = await cricketApi.refreshToken();
         if (mounted) {
           setAccessToken(data.access_token);
-          localStorage.setItem('cricbuzz_refresh_token', data.refresh_token);
           setUser(data.user);
         }
       } catch {
         if (mounted) {
-          logout();
+          setAccessToken(null);
+          setUser(null);
         }
       } finally {
         if (mounted) setIsLoading(false);
@@ -65,7 +63,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       mounted = false;
     };
-  }, [logout]);
+  }, []);
 
   return (
     <AuthContext.Provider

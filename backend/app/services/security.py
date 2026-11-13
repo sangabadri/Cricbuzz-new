@@ -64,9 +64,12 @@ def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = 
     return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
-def create_refresh_token(data: dict[str, Any], expires_delta: timedelta | None = None) -> str:
+def create_refresh_token(
+    data: dict[str, Any], expires_delta: timedelta | None = None
+) -> tuple[str, str, datetime]:
     """
     Generates a signed JWT refresh token with unique jti (default 7 days).
+    Returns (token_str, jti_str, expires_at_datetime).
     """
     to_encode = data.copy()
     now = datetime.now(timezone.utc)
@@ -74,13 +77,15 @@ def create_refresh_token(data: dict[str, Any], expires_delta: timedelta | None =
         expire = now + expires_delta
     else:
         expire = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    jti = str(uuid.uuid4())
     to_encode.update({
         "exp": expire,
         "iat": now,
-        "jti": str(uuid.uuid4()),
+        "jti": jti,
         "type": "refresh",
     })
-    return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+    token = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+    return token, jti, expire
 
 
 def decode_token(token: str) -> dict[str, Any]:

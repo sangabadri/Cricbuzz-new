@@ -17,9 +17,8 @@ Do not fix these while doing other work. Do not make them worse. Fix them only i
 ### D. [RESOLVED - 2026-11-13] Concurrent 401 Refresh Token Stampede (Correctness / Concurrency)
 - Resolved in `src/api/client.ts`: Introduced in-flight `refreshPromise` coalescing with Promise chaining and `/auth/refresh` recursion prevention. Added 4 unit tests in `src/api/__tests__/client.test.ts`.
 
-### E. Insecure Refresh Token Storage (Security)
-- 7-day refresh tokens are stored in `localStorage` (`cricbuzz_refresh_token`), exposing long-lived credentials to cross-site scripting (XSS) vectors.
-- **Remediation**: Transition to `httpOnly`, `SameSite=Strict` secure cookies for refresh tokens.
+### E. [RESOLVED - 2026-11-13] Insecure Refresh Token Storage (Security)
+- Resolved in Slice F: Completely eliminated refresh token storage in browser `localStorage`. Configured `withCredentials: true` across Axios API client to transmit refresh tokens exclusively via `httpOnly`, `SameSite=Lax`, `Path=/api/v1/auth` cookies. Updated `AuthContext` to hydrate session automatically on mount and revoke tokens on logout.
 
 ### F. [RESOLVED - 2026-11-13] Duplicate API Client Files (Consistency)
 - Resolved in Slice E: Consolidated API client into single canonical `src/lib/api-client.ts` and test into `src/lib/__tests__/api-client.test.ts`. Completely removed orphan stub `src/lib/api/client.ts` and legacy `src/api/` directory. All 38 consumers updated.

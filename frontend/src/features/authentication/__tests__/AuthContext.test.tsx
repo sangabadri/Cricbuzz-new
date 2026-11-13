@@ -17,6 +17,7 @@ vi.mock('../../../lib/api-client', async () => {
       login: vi.fn(),
       register: vi.fn(),
       refreshToken: vi.fn(),
+      logout: vi.fn(),
       getCurrentUser: vi.fn(),
     },
   };
@@ -50,21 +51,56 @@ describe('AuthContext & Authentication Lifecycle', () => {
     localStorage.clear();
   });
 
-  it('renders with initial logged-out state when no token is present', async () => {
+  it('renders with initial logged-out state when no session cookie is present', async () => {
+    vi.mocked(cricketApi.refreshToken).mockRejectedValueOnce(new Error('No session'));
+
     render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>
     );
 
-    expect(screen.getByTestId('auth-status')).toHaveTextContent('logged-out');
-    expect(screen.getByTestId('username')).toHaveTextContent('none');
+    await waitFor(() => {
+      expect(screen.getByTestId('auth-status')).toHaveTextContent('logged-out');
+      expect(screen.getByTestId('username')).toHaveTextContent('none');
+    });
   });
 
-  it('successfully logs in, saves tokens, and updates user state', async () => {
+  it('hydrates session on mount when httpOnly cookie session is active', async () => {
+    vi.mocked(cricketApi.refreshToken).mockResolvedValueOnce({
+      access_token: 'hydrated-access-token',
+      refresh_token: 'cookie-handled-token',
+      token_type: 'bearer',
+      expires_in: 900,
+      user: {
+        id: 77,
+        username: 'session_cookie_user',
+        email: 'cookie@example.com',
+        is_active: true,
+        is_superuser: false,
+      },
+    });
+
+    render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('auth-status')).toHaveTextContent('logged-in');
+      expect(screen.getByTestId('username')).toHaveTextContent('session_cookie_user');
+      expect(getAccessToken()).toBe('hydrated-access-token');
+      // Verify refresh tokens are NEVER stored in localStorage
+      expect(localStorage.getItem('cricbuzz_refresh_token')).toBeNull();
+    });
+  });
+
+  it('successfully logs in, keeps access token in memory, and never stores in localStorage', async () => {
+    vi.mocked(cricketApi.refreshToken).mockRejectedValueOnce(new Error('No session'));
     vi.mocked(cricketApi.login).mockResolvedValueOnce({
       access_token: 'mock-access-token-123',
-      refresh_token: 'mock-refresh-token-456',
+      refresh_token: 'cookie-refresh-456',
       token_type: 'bearer',
       expires_in: 900,
       user: {
@@ -87,15 +123,16 @@ describe('AuthContext & Authentication Lifecycle', () => {
     await waitFor(() => {
       expect(screen.getByTestId('auth-status')).toHaveTextContent('logged-in');
       expect(screen.getByTestId('username')).toHaveTextContent('test_user');
-      expect(localStorage.getItem('cricbuzz_refresh_token')).toBe('mock-refresh-token-456');
       expect(getAccessToken()).toBe('mock-access-token-123');
+      expect(localStorage.getItem('cricbuzz_refresh_token')).toBeNull();
     });
   });
 
-  it('successfully registers, saves tokens, and updates user state', async () => {
+  it('successfully registers and updates user state securely', async () => {
+    vi.mocked(cricketApi.refreshToken).mockRejectedValueOnce(new Error('No session'));
     vi.mocked(cricketApi.register).mockResolvedValueOnce({
       access_token: 'new-access-token-789',
-      refresh_token: 'new-refresh-token-101',
+      refresh_token: 'cookie-refresh-101',
       token_type: 'bearer',
       expires_in: 900,
       user: {
@@ -118,14 +155,16 @@ describe('AuthContext & Authentication Lifecycle', () => {
     await waitFor(() => {
       expect(screen.getByTestId('auth-status')).toHaveTextContent('logged-in');
       expect(screen.getByTestId('username')).toHaveTextContent('new_user');
-      expect(localStorage.getItem('cricbuzz_refresh_token')).toBe('new-refresh-token-101');
+      expect(getAccessToken()).toBe('new-access-token-789');
+      expect(localStorage.getItem('cricbuzz_refresh_token')).toBeNull();
     });
   });
 
-  it('logs out and clears access and refresh tokens', async () => {
+  it('logs out via API, revokes session, and clears in-memory access token', async () => {
+    vi.mocked(cricketApi.refreshToken).mockRejectedValueOnce(new Error('No session'));
     vi.mocked(cricketApi.login).mockResolvedValueOnce({
       access_token: 'mock-access-token-123',
-      refresh_token: 'mock-refresh-token-456',
+      refresh_token: 'cookie-refresh-456',
       token_type: 'bearer',
       expires_in: 900,
       user: {
@@ -136,6 +175,7 @@ describe('AuthContext & Authentication Lifecycle', () => {
         is_superuser: false,
       },
     });
+    vi.mocked(cricketApi.logout).mockResolvedValueOnce(undefined);
 
     render(
       <AuthProvider>
@@ -148,6 +188,7 @@ describe('AuthContext & Authentication Lifecycle', () => {
 
     fireEvent.click(screen.getByText('Trigger Logout'));
     await waitFor(() => {
+      expect(cricketApi.logout).toHaveBeenCalled();
       expect(screen.getByTestId('auth-status')).toHaveTextContent('logged-out');
       expect(localStorage.getItem('cricbuzz_refresh_token')).toBeNull();
       expect(getAccessToken()).toBeNull();
@@ -155,6 +196,8 @@ describe('AuthContext & Authentication Lifecycle', () => {
   });
 
   it('redirects unauthenticated users in ProtectedRoute to login', async () => {
+    vi.mocked(cricketApi.refreshToken).mockRejectedValueOnce(new Error('No session'));
+
     render(
       <MemoryRouter initialEntries={['/dashboard']}>
         <AuthProvider>

@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import jwt
 from app.domain.exceptions import (
     EntityConflictError,
@@ -8,6 +9,7 @@ from app.domain.exceptions import (
 )
 from app.models.user import User
 from app.repositories.user import UserRepository
+from app.repositories.refresh_token import RefreshTokenRepository
 from app.schemas.auth import UserLogin, UserRegister
 from app.services.security import (
     create_access_token,
@@ -19,8 +21,13 @@ from app.services.security import (
 
 
 class AuthService:
-    def __init__(self, user_repo: UserRepository):
+    def __init__(
+        self,
+        user_repo: UserRepository,
+        refresh_token_repo: RefreshTokenRepository | None = None,
+    ):
         self.user_repo = user_repo
+        self.refresh_token_repo = refresh_token_repo
 
     async def register(self, user_in: UserRegister) -> tuple[User, str, str]:
         # Validate unique username
@@ -42,7 +49,9 @@ class AuthService:
         )
 
         access_token = create_access_token({"sub": str(user.id), "username": user.username})
-        refresh_token = create_refresh_token({"sub": str(user.id)})
+        refresh_token, jti, expires_at = create_refresh_token({"sub": str(user.id)})
+        if self.refresh_token_repo:
+            await self.refresh_token_repo.create(user_id=user.id, jti=jti, expires_at=expires_at)
         return user, access_token, refresh_token
 
     async def login(self, login_in: UserLogin) -> tuple[User, str, str]:
@@ -57,7 +66,9 @@ class AuthService:
             raise InactiveUserError("User account is inactive")
 
         access_token = create_access_token({"sub": str(user.id), "username": user.username})
-        refresh_token = create_refresh_token({"sub": str(user.id)})
+        refresh_token, jti, expires_at = create_refresh_token({"sub": str(user.id)})
+        if self.refresh_token_repo:
+            await self.refresh_token_repo.create(user_id=user.id, jti=jti, expires_at=expires_at)
         return user, access_token, refresh_token
 
     async def refresh_tokens(self, refresh_token: str) -> tuple[User, str, str]:
@@ -66,6 +77,9 @@ class AuthService:
             if payload.get("type") != "refresh":
                 raise TokenExpiredOrInvalidError("Invalid token type")
             user_id = int(payload.get("sub", 0))
+            jti = payload.get("jti")
+            if not jti:
+                raise TokenExpiredOrInvalidError("Invalid token: missing jti")
         except (jwt.PyJWTError, ValueError) as err:
             raise TokenExpiredOrInvalidError("Invalid or expired refresh token") from err
 
@@ -75,9 +89,46 @@ class AuthService:
         if not user.is_active:
             raise InactiveUserError("User account is inactive")
 
+        if self.refresh_token_repo:
+            stored_token = await self.refresh_token_repo.get_by_jti(jti)
+            if not stored_token:
+                raise TokenExpiredOrInvalidError("Invalid refresh token")
+
+            # Cryptographic token reuse detection:
+            # If the token was already revoked, this is a compromised replay attempt.
+            # Invalidate all active sessions for this user immediately!
+            if stored_token.revoked_at is not None:
+                await self.refresh_token_repo.revoke_all_for_user(user_id)
+                raise TokenExpiredOrInvalidError("Refresh token was revoked - reuse detected")
+
+            # Validate expiration against stored expires_at
+            token_exp = stored_token.expires_at
+            now_utc = datetime.now(timezone.utc)
+            if token_exp.tzinfo is None:
+                now_utc = now_utc.replace(tzinfo=None)
+            if token_exp < now_utc:
+                raise TokenExpiredOrInvalidError("Refresh token expired")
+
+            # Atomically revoke current refresh token
+            await self.refresh_token_repo.revoke(jti)
+
         new_access_token = create_access_token({"sub": str(user.id), "username": user.username})
-        new_refresh_token = create_refresh_token({"sub": str(user.id)})
+        new_refresh_token, new_jti, new_expires_at = create_refresh_token({"sub": str(user.id)})
+        if self.refresh_token_repo:
+            await self.refresh_token_repo.create(user_id=user.id, jti=new_jti, expires_at=new_expires_at)
+
         return user, new_access_token, new_refresh_token
+
+    async def logout(self, refresh_token: str | None = None) -> None:
+        if not refresh_token:
+            return
+        try:
+            payload = decode_token(refresh_token)
+            jti = payload.get("jti")
+            if jti and self.refresh_token_repo:
+                await self.refresh_token_repo.revoke(jti)
+        except Exception:
+            pass
 
     async def get_user_by_id(self, user_id: int) -> User:
         user = await self.user_repo.get_by_id(user_id)

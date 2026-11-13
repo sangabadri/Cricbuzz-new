@@ -43,6 +43,7 @@ async def test_auth_registration_login_and_me_e2e(test_client: AsgiTestClient):
     )
     assert login_resp.status_code == 200
     assert "access_token" in login_resp.json()
+    assert "cricbuzz_refresh_token" in login_resp.cookies
 
     # 5. Login with invalid password -> 401 Unauthorized
     bad_login_resp = await test_client.post(
@@ -66,16 +67,46 @@ async def test_auth_registration_login_and_me_e2e(test_client: AsgiTestClient):
     )
     assert dup_reg_resp.status_code == 409
 
-    # 7. Refresh token
-    refresh_resp = await test_client.post(
+    # 7. Fallback body refresh support for non-browser clients (using active alice_refresh)
+    body_refresh_resp = await test_client.post(
         "/api/v1/auth/refresh",
         json={"refresh_token": alice_refresh},
     )
-    assert refresh_resp.status_code == 200
-    assert "access_token" in refresh_resp.json()
-    assert refresh_resp.json()["refresh_token"] != alice_refresh
+    assert body_refresh_resp.status_code == 200
+    assert "access_token" in body_refresh_resp.json()
 
-    # 8. Invalid refresh token -> 401 Unauthorized
+    # 8. Refresh token via httpOnly cookie (no request body) using login cookie
+    refresh_cookie_resp = await test_client.post(
+        "/api/v1/auth/refresh",
+        cookies={"cricbuzz_refresh_token": login_resp.cookies["cricbuzz_refresh_token"]},
+    )
+    assert refresh_cookie_resp.status_code == 200
+    assert "access_token" in refresh_cookie_resp.json()
+    assert "cricbuzz_refresh_token" in refresh_cookie_resp.cookies
+    rotated_cookie = refresh_cookie_resp.cookies["cricbuzz_refresh_token"]
+
+    # 9. Logout revokes token and clears cookie
+    logout_resp = await test_client.post(
+        "/api/v1/auth/logout",
+        cookies={"cricbuzz_refresh_token": rotated_cookie},
+    )
+    assert logout_resp.status_code == 200
+
+    # Refresh after logout fails
+    post_logout_refresh = await test_client.post(
+        "/api/v1/auth/refresh",
+        cookies={"cricbuzz_refresh_token": rotated_cookie},
+    )
+    assert post_logout_refresh.status_code == 401
+
+    # 10. Replay attack: Replaying the already-revoked rotated_cookie triggers reuse detection
+    replay_resp = await test_client.post(
+        "/api/v1/auth/refresh",
+        cookies={"cricbuzz_refresh_token": rotated_cookie},
+    )
+    assert replay_resp.status_code == 401
+
+    # 11. Invalid refresh token -> 401 Unauthorized
     bad_refresh_resp = await test_client.post(
         "/api/v1/auth/refresh",
         json={"refresh_token": "invalid.malformed.token"},

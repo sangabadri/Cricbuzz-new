@@ -22,10 +22,8 @@ The auth and match access implementation introduced architectural boundary viola
 ### E. [RESOLVED - 2026-11-13] Semantic Misappropriation of `CricketDomainError` for Auth (Consistency / HTTP Contract)
 - Resolved in Slice D: Introduced `InvalidCredentialsError`, `InactiveUserError`, `EntityConflictError`, and `TokenExpiredOrInvalidError` in `domain/exceptions.py`. Updated `main.py`'s global handler to map 401 with `WWW-Authenticate: Bearer` header, 403, and 409 Conflict.
 
-### F. Stateless Refresh Tokens Without Revocation/Blacklist (Security)
-- `create_refresh_token` generates a 7-day JWT with a `jti` UUID, but `jti` is never stored.
-- `AuthService.refresh_tokens` does not track revoked tokens. Once issued, a refresh token remains valid for 7 days even if the user logs out, rotates tokens, or changes passwords.
-- **Remediation**: Persist active refresh token `jti`s in the database or Redis to enforce genuine token revocation upon logout and rotation.
+### F. [RESOLVED - 2026-11-13] Stateless Refresh Tokens Without Revocation/Blacklist (Security)
+- Resolved in Slice F: Implemented active session tracking via `RefreshToken` database model and `RefreshTokenRepository`. Enforced cryptographic token rotation on every `/auth/refresh` request, with automatic reuse attack detection that invalidates all active sessions for a user if a revoked token is replayed. Added `/auth/logout` endpoint that revokes the active database session and clears the browser cookie.
 
 ### G. [RESOLVED - 2026-11-13] Inconsistent Route Path Parameters (Consistency)
 - Resolved: Standardized route paths to `/matches/{match_id}/access` and route parameter names to `match_id: int`.

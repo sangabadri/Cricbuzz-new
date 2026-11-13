@@ -14,6 +14,7 @@ from app.models.squad import Squad, SquadPlayer
 from app.models.team import Team
 from app.models.user import User
 from app.models.match_access import MatchAccess
+from app.models.refresh_token import RefreshToken
 from app.domain.enums import MatchStatus, InningsStatus, MatchFormat, MatchUserRole
 from app.domain.exceptions import RuleViolationError, EntityNotFoundError
 from app.schemas.delivery import DeliveryCreate
@@ -35,6 +36,7 @@ from app.api.deps import (
     get_squad_service,
     get_team_service,
     get_user_repo,
+    get_refresh_token_repo,
 )
 from app.services.auth import AuthService
 from app.services.delivery import DeliveryService
@@ -66,11 +68,19 @@ def sync(async_fn: Callable[..., Coroutine[Any, Any, Any]]) -> Callable[..., Any
 
 
 class AsgiResponse:
-    """Lightweight HTTP response representation with status code, headers, and JSON decoding."""
-    def __init__(self, status_code: int, headers: dict[str, str], body: bytes):
+    """Lightweight HTTP response representation with status code, headers, cookies, and JSON decoding."""
+    def __init__(self, status_code: int, raw_headers: list[tuple[bytes, bytes]], body: bytes):
         self.status_code = status_code
-        self.headers = headers
+        self.raw_headers = raw_headers
+        self.headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in raw_headers}
         self.content = body
+        self.cookies: dict[str, str] = {}
+        for k_bytes, v_bytes in raw_headers:
+            if k_bytes.decode("latin-1").lower() == "set-cookie":
+                cookie_str = v_bytes.decode("latin-1").split(";")[0]
+                if "=" in cookie_str:
+                    c_name, c_val = cookie_str.split("=", 1)
+                    self.cookies[c_name.strip()] = c_val.strip()
 
     def json(self) -> Any:
         if not self.content:
@@ -97,6 +107,7 @@ class AsgiTestClient:
         json_data: Any = None,
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
+        cookies: dict[str, str] | None = None,
     ) -> AsgiResponse:
         import urllib.parse
         
@@ -111,6 +122,9 @@ class AsgiTestClient:
             (b"content-type", b"application/json"),
             (b"content-length", str(len(body)).encode("ascii")),
         ]
+        if cookies:
+            cookie_header = "; ".join(f"{k}={v}" for k, v in cookies.items())
+            req_headers.append((b"cookie", cookie_header.encode("latin-1")))
         if headers:
             for k, v in headers.items():
                 req_headers.append((k.lower().encode("latin-1"), v.encode("latin-1")))
@@ -141,10 +155,9 @@ class AsgiTestClient:
 
         status_code = next(m["status"] for m in sent_messages if m["type"] == "http.response.start")
         raw_headers = next(m.get("headers", []) for m in sent_messages if m["type"] == "http.response.start")
-        resp_headers = {k.decode("latin-1"): v.decode("latin-1") for k, v in raw_headers}
         response_body = b"".join(m.get("body", b"") for m in sent_messages if m["type"] == "http.response.body")
 
-        return AsgiResponse(status_code, resp_headers, response_body)
+        return AsgiResponse(status_code, raw_headers, response_body)
 
     async def get(self, path: str, params: dict[str, Any] | None = None, **kwargs: Any) -> AsgiResponse:
         return await self._request("GET", path, params=params, **kwargs)
@@ -174,6 +187,7 @@ class InMemoryStore:
         self.deliveries: dict[int, Delivery] = []
         self.users: dict[int, User] = {}
         self.match_access: list[MatchAccess] = []
+        self.refresh_tokens: dict[str, RefreshToken] = {}
         self._team_seq = 0
         self._player_seq = 0
         self._match_seq = 0
@@ -183,6 +197,7 @@ class InMemoryStore:
         self._delivery_seq = 0
         self._user_seq = 0
         self._match_access_seq = 0
+        self._refresh_token_seq = 0
 
 
 class InMemoryUserRepository:
@@ -217,6 +232,43 @@ class InMemoryUserRepository:
         )
         self.store.users[user.id] = user
         return user
+
+
+class InMemoryRefreshTokenRepository:
+    def __init__(self, store: InMemoryStore):
+        self.store = store
+
+    async def create(self, user_id: int, jti: str, expires_at: datetime) -> RefreshToken:
+        self.store._refresh_token_seq += 1
+        token = RefreshToken(
+            id=self.store._refresh_token_seq,
+            user_id=user_id,
+            jti=jti,
+            expires_at=expires_at,
+            revoked_at=None,
+            created_at=datetime.now(timezone.utc),
+        )
+        self.store.refresh_tokens[jti] = token
+        return token
+
+    async def get_by_jti(self, jti: str) -> RefreshToken | None:
+        return self.store.refresh_tokens.get(jti)
+
+    async def revoke(self, jti: str) -> bool:
+        token = self.store.refresh_tokens.get(jti)
+        if token and token.revoked_at is None:
+            token.revoked_at = datetime.now(timezone.utc)
+            return True
+        return False
+
+    async def revoke_all_for_user(self, user_id: int) -> int:
+        count = 0
+        now = datetime.now(timezone.utc)
+        for token in self.store.refresh_tokens.values():
+            if token.user_id == user_id and token.revoked_at is None:
+                token.revoked_at = now
+                count += 1
+        return count
 
 
 class InMemoryMatchAccessRepository:
@@ -541,6 +593,7 @@ def test_client(in_memory_store, bypass_startup_lifespan):
     delivery_repo = InMemoryDeliveryRepository(in_memory_store)
     user_repo = InMemoryUserRepository(in_memory_store)
     match_access_repo = InMemoryMatchAccessRepository(in_memory_store)
+    refresh_token_repo = InMemoryRefreshTokenRepository(in_memory_store)
 
     team_service = TeamService(team_repo)
     player_service = PlayerService(player_repo)
@@ -549,7 +602,7 @@ def test_client(in_memory_store, bypass_startup_lifespan):
     innings_service = InningsService(innings_repo, match_repo, delivery_repo, squad_repo)
     delivery_service = DeliveryService(delivery_repo, innings_repo, match_repo, squad_repo)
     scorecard_service = ScorecardService(match_repo, innings_repo, delivery_repo, player_repo, team_repo)
-    auth_service = AuthService(user_repo)
+    auth_service = AuthService(user_repo, refresh_token_repo)
     match_access_service = MatchAccessService(match_access_repo, match_repo, user_repo)
 
     async def _team():
@@ -588,6 +641,9 @@ def test_client(in_memory_store, bypass_startup_lifespan):
     async def _match_access():
         return match_access_service
 
+    async def _refresh_token_r():
+        return refresh_token_repo
+
     app.dependency_overrides[get_team_service] = _team
     app.dependency_overrides[get_player_service] = _player
     app.dependency_overrides[get_match_repo] = _match_r
@@ -598,6 +654,7 @@ def test_client(in_memory_store, bypass_startup_lifespan):
     app.dependency_overrides[get_scorecard_service] = _scorecard
     app.dependency_overrides[get_user_repo] = _user_r
     app.dependency_overrides[get_match_access_repo] = _match_access_r
+    app.dependency_overrides[get_refresh_token_repo] = _refresh_token_r
     app.dependency_overrides[get_auth_service] = _auth
     app.dependency_overrides[get_match_access_service] = _match_access
 
