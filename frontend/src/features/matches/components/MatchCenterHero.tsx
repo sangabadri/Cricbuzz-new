@@ -6,10 +6,10 @@ import {
   MapPin,
   Trophy,
 } from 'lucide-react';
-import type { LiveMatchResponse, MatchScorecardResponse } from '../../types/cricket';
-import { BallBubble } from '../common/BallBubble';
-import { StatusBadge } from '../common/StatusBadge';
-import { getTeamIdentity } from '../../utils/teamColors';
+import type { LiveMatchResponse, MatchScorecardResponse } from '../../../types/cricket';
+import { BallBubble } from '../../../components/common/BallBubble';
+import { StatusBadge } from '../../../components/common/StatusBadge';
+import { getTeamIdentity } from '../../../utils/teamColors';
 
 export interface MatchCenterHeroProps {
   ticker: LiveMatchResponse;

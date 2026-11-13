@@ -1,7 +1,7 @@
 import React from 'react';
 import { Activity, Users } from 'lucide-react';
-import type { LiveBatter, LiveMatchResponse } from '../../types/cricket';
-import { BallBubble } from '../common/BallBubble';
+import type { LiveBatter, LiveMatchResponse } from '../../../types/cricket';
+import { BallBubble } from '../../../components/common/BallBubble';
 
 export interface CreaseTabProps {
   ticker: LiveMatchResponse;

@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { getTeamIdentity } from '../../utils/teamColors';
-import { BattingTable } from '../../components/match/BattingTable';
-import type { BattingTableTotals } from '../../components/match/BattingTable';
-import { BowlingTable } from '../../components/match/BowlingTable';
+import { BattingTable } from '../../features/matches/components/BattingTable';
+import type { BattingTableTotals } from '../../features/matches/components/BattingTable';
+import { BowlingTable } from '../../features/matches/components/BowlingTable';
 import type { BatterScorecard, BowlerScorecard, ExtrasBreakdown } from '../../types/cricket';
 
 describe('Challenger Empirical Boundary & Stress Suite', () => {

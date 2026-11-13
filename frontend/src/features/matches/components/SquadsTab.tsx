@@ -1,6 +1,6 @@
 import React from 'react';
 import { Shield } from 'lucide-react';
-import type { MatchScorecardResponse, SquadResponse } from '../../types/cricket';
+import type { MatchScorecardResponse, SquadResponse } from '../../../types/cricket';
 
 export interface SquadsTabProps {
   teamAName?: string;

@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
-import type { BatterScorecard, ExtrasBreakdown } from '../../../types/cricket';
+import type { BatterScorecard, ExtrasBreakdown } from '../../../../types/cricket';
 import type { BattingTableTotals } from '../BattingTable';
 import { BattingTable } from '../BattingTable';
 

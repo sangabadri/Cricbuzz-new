@@ -1,5 +1,5 @@
 import React from 'react';
-import type { InningsScorecard, MatchScorecardResponse } from '../../types/cricket';
+import type { InningsScorecard, MatchScorecardResponse } from '../../../types/cricket';
 import { BattingTable } from './BattingTable';
 import { BowlingTable } from './BowlingTable';
 

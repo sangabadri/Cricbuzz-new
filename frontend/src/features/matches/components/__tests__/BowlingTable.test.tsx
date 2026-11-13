@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
-import type { BowlerScorecard } from '../../../types/cricket';
+import type { BowlerScorecard } from '../../../../types/cricket';
 import { BowlingTable } from '../BowlingTable';
 
 describe('BowlingTable Component', () => {

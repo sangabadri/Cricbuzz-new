@@ -8,11 +8,11 @@ import type {
   InningsScorecard,
   OversRecord,
 } from '../../types/cricket';
-import { MatchCenterHero } from '../../components/match/MatchCenterHero';
-import { CreaseTab } from '../../components/match/CreaseTab';
-import { ScorecardTab } from '../../components/match/ScorecardTab';
-import { SquadsTab } from '../../components/match/SquadsTab';
-import { CommentaryTab } from '../../components/match/CommentaryTab';
+import { MatchCenterHero } from '../../features/matches/components/MatchCenterHero';
+import { CreaseTab } from '../../features/matches/components/CreaseTab';
+import { ScorecardTab } from '../../features/matches/components/ScorecardTab';
+import { SquadsTab } from '../../features/matches/components/SquadsTab';
+import { CommentaryTab } from '../../features/matches/components/CommentaryTab';
 
 const baseTicker: LiveMatchResponse = {
   match_id: 101,

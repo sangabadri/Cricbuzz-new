@@ -1,5 +1,5 @@
 import React from 'react';
-import type { BowlerScorecard } from '../../types/cricket';
+import type { BowlerScorecard } from '../../../types/cricket';
 
 export interface BowlingTableProps {
   bowlers: BowlerScorecard[];

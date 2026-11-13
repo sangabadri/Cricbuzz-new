@@ -5,7 +5,7 @@ import type {
   LiveMatchResponse,
   MatchScorecardResponse,
   SquadResponse,
-} from '../../../types/cricket';
+} from '../../../../types/cricket';
 import { MatchCenterHero } from '../MatchCenterHero';
 import { CreaseTab } from '../CreaseTab';
 import { ScorecardTab } from '../ScorecardTab';

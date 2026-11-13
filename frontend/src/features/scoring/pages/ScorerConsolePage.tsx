@@ -19,7 +19,7 @@ import { BowlerModal } from '../../../components/scorer/modals/BowlerModal';
 import { IncomingBatterModal } from '../../../components/scorer/modals/IncomingBatterModal';
 import { StartInningsModal } from '../../../components/scorer/modals/StartInningsModal';
 import { MatchAccessModal } from '../../authentication/components/MatchAccessModal';
-import { CommentaryFeed } from '../../../components/match/CommentaryFeed';
+import { CommentaryFeed } from '../../matches/components/CommentaryFeed';
 import { Button } from '../../../components/ui/Button';
 
 export const ScorerConsolePage: React.FC = () => {

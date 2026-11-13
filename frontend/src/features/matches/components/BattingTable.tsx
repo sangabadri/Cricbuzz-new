@@ -1,5 +1,5 @@
 import React from 'react';
-import type { BatterScorecard, ExtrasBreakdown, OversRecord } from '../../types/cricket';
+import type { BatterScorecard, ExtrasBreakdown, OversRecord } from '../../../types/cricket';
 
 export interface BattingTableTotals {
   runs: number;

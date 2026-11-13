@@ -12,12 +12,12 @@ import {
   Users,
 } from 'lucide-react';
 import { cricketApi } from '../../../lib/api/client';
-import { MatchCenterHero } from '../../../components/match/MatchCenterHero';
-import { CreaseTab } from '../../../components/match/CreaseTab';
-import { ScorecardTab } from '../../../components/match/ScorecardTab';
-import { SquadsTab } from '../../../components/match/SquadsTab';
-import { CommentaryTab } from '../../../components/match/CommentaryTab';
-import { CommentaryFeed } from '../../../components/match/CommentaryFeed';
+import { MatchCenterHero } from '../components/MatchCenterHero';
+import { CreaseTab } from '../components/CreaseTab';
+import { ScorecardTab } from '../components/ScorecardTab';
+import { SquadsTab } from '../components/SquadsTab';
+import { CommentaryTab } from '../components/CommentaryTab';
+import { CommentaryFeed } from '../components/CommentaryFeed';
 import { Button } from '../../../components/ui/Button';
 
 export type MatchCenterTab = 'crease' | 'scorecard' | 'squads' | 'commentary';

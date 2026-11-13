@@ -1,7 +1,7 @@
 import React from 'react';
 import { Radio } from 'lucide-react';
-import type { DeliveryResponse } from '../../types/cricket';
-import { BallBubble } from '../common/BallBubble';
+import type { DeliveryResponse } from '../../../types/cricket';
+import { BallBubble } from '../../../components/common/BallBubble';
 
 export interface CommentaryFeedProps {
   deliveries: DeliveryResponse[];

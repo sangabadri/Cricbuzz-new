@@ -3,8 +3,8 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SetupWizard } from '../../pages/SetupWizard';
-import { CreaseTab } from '../../components/match/CreaseTab';
-import { BattingTable } from '../../components/match/BattingTable';
+import { CreaseTab } from '../../features/matches/components/CreaseTab';
+import { BattingTable } from '../../features/matches/components/BattingTable';
 import { ToastProvider } from '../../components/common/Toast';
 import { cricketApi, getApiErrorMessage } from '../../api/client';
 import type {

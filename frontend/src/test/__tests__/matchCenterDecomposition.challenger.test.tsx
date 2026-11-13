@@ -3,9 +3,9 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MatchCenter } from '../../pages/MatchCenter';
-import { MatchCenterHero } from '../../components/match/MatchCenterHero';
-import { CreaseTab } from '../../components/match/CreaseTab';
-import { ScorecardTab } from '../../components/match/ScorecardTab';
+import { MatchCenterHero } from '../../features/matches/components/MatchCenterHero';
+import { CreaseTab } from '../../features/matches/components/CreaseTab';
+import { ScorecardTab } from '../../features/matches/components/ScorecardTab';
 import { BallBubble } from '../../components/common/BallBubble';
 import { cricketApi } from '../../api/client';
 import type {

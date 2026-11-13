@@ -1,5 +1,5 @@
 import React from 'react';
-import type { DeliveryResponse } from '../../types/cricket';
+import type { DeliveryResponse } from '../../../types/cricket';
 import { CommentaryFeed } from './CommentaryFeed';
 
 export interface CommentaryTabProps {
