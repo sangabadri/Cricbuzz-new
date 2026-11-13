@@ -7,7 +7,7 @@ import {
   PlayCircle,
   Trophy,
 } from 'lucide-react';
-import { cricketApi } from '../../../lib/api/client';
+import { cricketApi } from '../../../lib/api-client';
 import type { Match } from '../../../types/cricket';
 import { StatusBadge } from '../../../components/common/StatusBadge';
 import { getTeamIdentity } from '../../../utils/teamColors';

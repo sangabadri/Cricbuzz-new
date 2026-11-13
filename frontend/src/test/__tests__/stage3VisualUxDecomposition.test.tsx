@@ -7,7 +7,7 @@ import { CreateTeamForm } from '../../components/setup/CreateTeamForm';
 import { CreatePlayerForm } from '../../components/setup/CreatePlayerForm';
 import { ScheduleMatchForm } from '../../components/setup/ScheduleMatchForm';
 import { ToastProvider } from '../../components/common/Toast';
-import { cricketApi } from '../../api/client';
+import { cricketApi } from '../../lib/api-client';
 import type { Match, MatchScorecardResponse, Team, Player } from '../../types/cricket';
 
 function createTestQueryClient() {

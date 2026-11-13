@@ -1,6 +1,6 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { cricketApi } from '../../../lib/api/client';
+import { cricketApi } from '../../../lib/api-client';
 import { ScheduleMatchForm } from '../../../components/setup/ScheduleMatchForm';
 import { PageHeader } from '../../../components/shared/PageHeader';
 import { Skeleton } from '../../../components/shared/Skeleton';

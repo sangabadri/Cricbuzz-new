@@ -5,7 +5,7 @@ import { WicketModal } from '../../components/scorer/modals/WicketModal';
 import { StartInningsModal } from '../../components/scorer/modals/StartInningsModal';
 import { useScorerModals } from '../../hooks/useScorerModals';
 import { renderHook, act } from '@testing-library/react';
-import { cricketApi, api } from '../../api/client';
+import { cricketApi, api } from '../../lib/api-client';
 import type { SquadResponse } from '../../types/cricket';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useScorerActions } from '../../hooks/useScorerActions';

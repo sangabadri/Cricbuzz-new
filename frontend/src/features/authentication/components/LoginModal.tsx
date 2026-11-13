@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Button, Input, Modal } from '../../../components/ui';
 import { useAuth } from '../context/AuthContext';
-import { getApiErrorMessage } from '../../../lib/api/client';
+import { getApiErrorMessage } from '../../../lib/api-client';
 
 interface LoginModalProps {
   isOpen: boolean;

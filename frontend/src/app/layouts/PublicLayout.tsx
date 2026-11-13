@@ -14,7 +14,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { cricketApi, getApiErrorMessage } from '../../api/client';
+import { cricketApi, getApiErrorMessage } from '../../lib/api-client';
 import { useToast } from '../../components/common/Toast';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../features/authentication/context/AuthContext';

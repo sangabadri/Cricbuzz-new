@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { PlusCircle, Search, Users } from 'lucide-react';
 import type { Role } from '../../../types/cricket';
-import { cricketApi, getApiErrorMessage } from '../../../lib/api/client';
+import { cricketApi, getApiErrorMessage } from '../../../lib/api-client';
 import { PlayerCard } from '../components/PlayerCard';
 import { PageHeader } from '../../../components/shared/PageHeader';
 import { Tabs } from '../../../components/ui/Tabs';

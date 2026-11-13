@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Calendar, CheckCircle2 } from 'lucide-react';
-import { cricketApi, getApiErrorMessage } from '../../api/client';
+import { cricketApi, getApiErrorMessage } from '../../lib/api-client';
 import { useToast } from '../common/Toast';
 import { PlayingXISelector } from './PlayingXISelector';
 import type {

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { cricketApi } from '../../../lib/api/client';
+import { cricketApi } from '../../../lib/api-client';
 import { CreateTeamForm } from '../../../components/setup/CreateTeamForm';
 import { PageHeader } from '../../../components/shared/PageHeader';
 

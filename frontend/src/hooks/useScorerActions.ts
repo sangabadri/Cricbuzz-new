@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { cricketApi } from '../api/client';
+import { cricketApi } from '../lib/api-client';
 import type {
   DeliveryCreate,
   ExtraType,

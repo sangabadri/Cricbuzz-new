@@ -8,7 +8,7 @@ import { SetupWizard } from '../../features/match-management/components/SetupWiz
 import { CreaseTab } from '../../features/matches/components/CreaseTab';
 import { BattingTable } from '../../features/matches/components/BattingTable';
 import { ToastProvider } from '../../components/common/Toast';
-import { cricketApi } from '../../api/client';
+import { cricketApi } from '../../lib/api-client';
 import type { LiveMatchResponse, OversRecord } from '../../types/cricket';
 
 function createTestQueryClient() {

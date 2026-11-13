@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { cricketApi, getApiErrorMessage } from '../../../lib/api/client';
+import { cricketApi, getApiErrorMessage } from '../../../lib/api-client';
 import { useToast } from '../../../components/common/Toast';
 import { HeroSection } from '../components/HeroSection';
 import { LiveMatchesCarousel } from '../components/LiveMatchesCarousel';

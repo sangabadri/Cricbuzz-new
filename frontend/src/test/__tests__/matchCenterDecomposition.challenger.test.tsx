@@ -7,7 +7,7 @@ import { MatchCenterHero } from '../../features/matches/components/MatchCenterHe
 import { CreaseTab } from '../../features/matches/components/CreaseTab';
 import { ScorecardTab } from '../../features/matches/components/ScorecardTab';
 import { BallBubble } from '../../components/common/BallBubble';
-import { cricketApi } from '../../api/client';
+import { cricketApi } from '../../lib/api-client';
 import type {
   LiveMatchResponse,
   MatchScorecardResponse,

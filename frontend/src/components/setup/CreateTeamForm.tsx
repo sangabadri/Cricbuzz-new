@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Shield } from 'lucide-react';
-import { cricketApi, getApiErrorMessage } from '../../api/client';
+import { cricketApi, getApiErrorMessage } from '../../lib/api-client';
 import { useToast } from '../common/Toast';
 import { getTeamIdentity } from '../../utils/teamColors';
 import type { Team } from '../../types/cricket';

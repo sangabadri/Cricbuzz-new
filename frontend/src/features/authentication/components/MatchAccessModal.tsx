@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Button, Input, Modal, Badge } from '../../../components/ui';
-import { cricketApi, getApiErrorMessage } from '../../../lib/api/client';
+import { cricketApi, getApiErrorMessage } from '../../../lib/api-client';
 import { UserCheck, Trash2, UserPlus, Shield } from 'lucide-react';
 
 interface MatchAccessModalProps {

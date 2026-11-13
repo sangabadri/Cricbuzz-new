@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Eye, PlusCircle, Search } from 'lucide-react';
 import type { Role } from '../../../types/cricket';
-import { cricketApi, getApiErrorMessage } from '../../../lib/api/client';
+import { cricketApi, getApiErrorMessage } from '../../../lib/api-client';
 import { PageHeader } from '../../../components/shared/PageHeader';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';

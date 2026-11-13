@@ -11,7 +11,7 @@ import {
   ScrollText,
   Users,
 } from 'lucide-react';
-import { cricketApi } from '../../../lib/api/client';
+import { cricketApi } from '../../../lib/api-client';
 import { MatchCenterHero } from '../components/MatchCenterHero';
 import { CreaseTab } from '../components/CreaseTab';
 import { ScorecardTab } from '../components/ScorecardTab';

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Button, Card, Input } from '../../../components/ui';
 import { useAuth } from '../context/AuthContext';
-import { getApiErrorMessage } from '../../../lib/api/client';
+import { getApiErrorMessage } from '../../../lib/api-client';
 import { UserPlus, ArrowLeft } from 'lucide-react';
 
 export const RegisterPage: React.FC = () => {

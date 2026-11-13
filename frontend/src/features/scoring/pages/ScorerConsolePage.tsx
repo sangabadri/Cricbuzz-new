@@ -12,7 +12,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { useScorer } from '../../../hooks/useScorer';
-import { cricketApi } from '../../../lib/api/client';
+import { cricketApi } from '../../../lib/api-client';
 import { CreaseHud } from '../../../components/scorer/CreaseHud';
 import { DeliveryKeypad } from '../../../components/scorer/DeliveryKeypad';
 import { WicketModal } from '../../../components/scorer/modals/WicketModal';

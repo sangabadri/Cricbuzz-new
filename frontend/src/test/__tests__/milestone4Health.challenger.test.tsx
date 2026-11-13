@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { getApiErrorMessage, cricketApi } from '../../api/client';
+import { getApiErrorMessage, cricketApi } from '../../lib/api-client';
 import { MatchDetailPage as MatchCenter } from '../../features/matches/pages/MatchDetailPage';
 import { ScorerConsolePage as ScorerConsole } from '../../features/scoring/pages/ScorerConsolePage';
 import { ToastProvider } from '../../components/common/Toast';

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertCircle, Layers, Shield, Trophy, UserPlus } from 'lucide-react';
-import { cricketApi } from '../../../lib/api/client';
+import { cricketApi } from '../../../lib/api-client';
 import { CreateTeamForm } from '../../../components/setup/CreateTeamForm';
 import { CreatePlayerForm } from '../../../components/setup/CreatePlayerForm';
 import { ScheduleMatchForm } from '../../../components/setup/ScheduleMatchForm';

@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { api, cricketApi, getApiErrorMessage, getAccessToken, setAccessToken } from '../client';
+import { api, cricketApi, getApiErrorMessage, getAccessToken, setAccessToken } from '../api-client';
 
 describe('API Client Environment & Configuration', () => {
   const originalAdapter = api.defaults.adapter;
@@ -30,7 +30,7 @@ describe('API Client Environment & Configuration', () => {
     vi.resetModules();
     vi.stubEnv('VITE_API_URL', 'https://production-cricbuzz.internal/api/v1');
 
-    const freshModule = await import('../client');
+    const freshModule = await import('../api-client');
     expect(freshModule.api.defaults.baseURL).toBe('https://production-cricbuzz.internal/api/v1');
   });
 
@@ -38,7 +38,7 @@ describe('API Client Environment & Configuration', () => {
     vi.resetModules();
     vi.stubEnv('VITE_API_URL', '');
 
-    const freshModule = await import('../client');
+    const freshModule = await import('../api-client');
     expect(freshModule.api.defaults.baseURL).toBe('/api/v1');
   });
 

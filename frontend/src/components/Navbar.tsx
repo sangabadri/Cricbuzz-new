@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { PlusCircle, Zap, Trophy } from 'lucide-react';
-import { cricketApi, getApiErrorMessage } from '../api/client';
+import { cricketApi, getApiErrorMessage } from '../lib/api-client';
 import { useToast } from './common/Toast';
 
 export const Navbar: React.FC = () => {

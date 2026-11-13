@@ -13,7 +13,7 @@ import {
   Users,
   Zap,
 } from 'lucide-react';
-import { cricketApi, getApiErrorMessage } from '../../../lib/api/client';
+import { cricketApi, getApiErrorMessage } from '../../../lib/api-client';
 import { useToast } from '../../../components/common/Toast';
 import { PageHeader } from '../../../components/shared/PageHeader';
 import { Button } from '../../../components/ui/Button';

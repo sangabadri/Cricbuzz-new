@@ -2,7 +2,7 @@ import React from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, CalendarPlus, Trophy } from 'lucide-react';
-import { cricketApi, getApiErrorMessage } from '../../../lib/api/client';
+import { cricketApi, getApiErrorMessage } from '../../../lib/api-client';
 import { MatchCard } from '../../matches/components/MatchCard';
 import { Button } from '../../../components/ui/Button';
 import { Skeleton } from '../../../components/shared/Skeleton';

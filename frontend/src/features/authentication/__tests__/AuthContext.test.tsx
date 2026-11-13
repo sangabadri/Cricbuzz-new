@@ -4,11 +4,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { ProtectedRoute } from '../../../app/router/ProtectedRoute';
-import { cricketApi, getAccessToken } from '../../../lib/api/client';
+import { cricketApi, getAccessToken } from '../../../lib/api-client';
 
-vi.mock('../../../lib/api/client', async () => {
-  const actual = await vi.importActual<typeof import('../../../lib/api/client')>(
-    '../../../lib/api/client'
+vi.mock('../../../lib/api-client', async () => {
+  const actual = await vi.importActual<typeof import('../../../lib/api-client')>(
+    '../../../lib/api-client'
   );
   return {
     ...actual,

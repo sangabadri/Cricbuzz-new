@@ -6,7 +6,7 @@ import { SetupWizard } from '../../features/match-management/components/SetupWiz
 import { CreaseTab } from '../../features/matches/components/CreaseTab';
 import { BattingTable } from '../../features/matches/components/BattingTable';
 import { ToastProvider } from '../../components/common/Toast';
-import { cricketApi, getApiErrorMessage } from '../../api/client';
+import { cricketApi, getApiErrorMessage } from '../../lib/api-client';
 import type {
   LiveMatchResponse,
   OversRecord,

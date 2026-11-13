@@ -6,7 +6,7 @@ import { BowlerModal } from '../../components/scorer/modals/BowlerModal';
 import { CreaseHud } from '../../components/scorer/CreaseHud';
 import { useScorerActions } from '../../hooks/useScorerActions';
 import type { UseScorerModalsReturn } from '../../hooks/useScorerModals';
-import { cricketApi } from '../../api/client';
+import { cricketApi } from '../../lib/api-client';
 import type {
   LiveMatchResponse,
   LiveScorerStateResponse,

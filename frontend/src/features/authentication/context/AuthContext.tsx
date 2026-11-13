@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { LoginCredentials, RegisterCredentials, User } from '../../../types/auth';
-import { cricketApi, setAccessToken } from '../../../lib/api/client';
+import { cricketApi, setAccessToken } from '../../../lib/api-client';
 
 interface AuthContextType {
   user: User | null;

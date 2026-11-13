@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { cricketApi } from '../api/client';
+import { cricketApi } from '../lib/api-client';
 import { useToast } from '../components/common/Toast';
 import type {
   LiveMatchResponse,
