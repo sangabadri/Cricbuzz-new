@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { FixtureCard } from '../../pages/Home';
+import { FixtureCard } from '../../features/matches/components/FixtureCard';
 import { CreateTeamForm } from '../../components/setup/CreateTeamForm';
 import { CreatePlayerForm } from '../../components/setup/CreatePlayerForm';
 import { ScheduleMatchForm } from '../../components/setup/ScheduleMatchForm';

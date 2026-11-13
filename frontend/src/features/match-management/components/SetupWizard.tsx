@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertCircle, Layers, Shield, Trophy, UserPlus } from 'lucide-react';
-import { cricketApi } from '../api/client';
-import { CreateTeamForm } from '../components/setup/CreateTeamForm';
-import { CreatePlayerForm } from '../components/setup/CreatePlayerForm';
-import { ScheduleMatchForm } from '../components/setup/ScheduleMatchForm';
-import type { MatchScheduleFormData, TossFormData } from '../components/setup/ScheduleMatchForm';
-import type { PlayerFormData } from '../components/setup/CreatePlayerForm';
+import { cricketApi } from '../../../lib/api/client';
+import { CreateTeamForm } from '../../../components/setup/CreateTeamForm';
+import { CreatePlayerForm } from '../../../components/setup/CreatePlayerForm';
+import { ScheduleMatchForm } from '../../../components/setup/ScheduleMatchForm';
+import type { MatchScheduleFormData, TossFormData } from '../../../components/setup/ScheduleMatchForm';
+import type { PlayerFormData } from '../../../components/setup/CreatePlayerForm';
 
 export type { MatchScheduleFormData, TossFormData, PlayerFormData };
 export interface TeamFormData {

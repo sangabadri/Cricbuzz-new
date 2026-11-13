@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MatchCenter } from '../../pages/MatchCenter';
 import { ScorerConsole } from '../../pages/ScorerConsole';
-import { SetupWizard } from '../../pages/SetupWizard';
+import { SetupWizard } from '../../features/match-management/components/SetupWizard';
 import { CreaseTab } from '../../features/matches/components/CreaseTab';
 import { BattingTable } from '../../features/matches/components/BattingTable';
 import { ToastProvider } from '../../components/common/Toast';

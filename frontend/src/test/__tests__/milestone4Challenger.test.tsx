@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { SetupWizard } from '../../pages/SetupWizard';
+import { SetupWizard } from '../../features/match-management/components/SetupWizard';
 import { CreaseTab } from '../../features/matches/components/CreaseTab';
 import { BattingTable } from '../../features/matches/components/BattingTable';
 import { ToastProvider } from '../../components/common/Toast';
