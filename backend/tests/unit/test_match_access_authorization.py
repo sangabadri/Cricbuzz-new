@@ -11,6 +11,7 @@ from app.domain.exceptions import (
 from app.models.user import User
 from app.repositories.match_access import MatchAuthContext
 from app.services.match_access import MatchAccessService
+from tests.conftest import sync
 
 
 @pytest.fixture
@@ -33,7 +34,7 @@ def auth_service(mock_match_access_repo, mock_match_repo, mock_user_repo):
     return MatchAccessService(mock_match_access_repo, mock_match_repo, mock_user_repo)
 
 
-@pytest.mark.anyio
+@sync
 async def test_authorize_match_access_nonexistent_match(auth_service, mock_match_access_repo):
     mock_match_access_repo.get_match_auth_context.return_value = MatchAuthContext(
         match_exists=False,
@@ -46,7 +47,7 @@ async def test_authorize_match_access_nonexistent_match(auth_service, mock_match
     assert "999 not found" in str(exc_info.value)
 
 
-@pytest.mark.anyio
+@sync
 async def test_authorize_match_access_legacy_unassigned_match(auth_service, mock_match_access_repo):
     mock_match_access_repo.get_match_auth_context.return_value = MatchAuthContext(
         match_exists=True,
@@ -58,7 +59,7 @@ async def test_authorize_match_access_legacy_unassigned_match(auth_service, mock
     assert result is None
 
 
-@pytest.mark.anyio
+@sync
 async def test_authorize_match_access_unauthenticated_on_assigned_match(auth_service, mock_match_access_repo):
     mock_match_access_repo.get_match_auth_context.return_value = MatchAuthContext(
         match_exists=True,
@@ -69,7 +70,7 @@ async def test_authorize_match_access_unauthenticated_on_assigned_match(auth_ser
         await auth_service.authorize_match_access(1, None, [MatchUserRole.OWNER, MatchUserRole.SCORER])
 
 
-@pytest.mark.anyio
+@sync
 async def test_authorize_match_access_superuser_always_allowed(auth_service, mock_match_access_repo):
     mock_match_access_repo.get_match_auth_context.return_value = MatchAuthContext(
         match_exists=True,
@@ -81,7 +82,7 @@ async def test_authorize_match_access_superuser_always_allowed(auth_service, moc
     assert result == admin
 
 
-@pytest.mark.anyio
+@sync
 async def test_authorize_match_access_owner_allowed_for_all_actions(auth_service, mock_match_access_repo):
     mock_match_access_repo.get_match_auth_context.return_value = MatchAuthContext(
         match_exists=True,
@@ -94,7 +95,7 @@ async def test_authorize_match_access_owner_allowed_for_all_actions(auth_service
     assert result == owner
 
 
-@pytest.mark.anyio
+@sync
 async def test_authorize_match_access_scorer_denied_owner_action(auth_service, mock_match_access_repo):
     mock_match_access_repo.get_match_auth_context.return_value = MatchAuthContext(
         match_exists=True,
@@ -107,7 +108,7 @@ async def test_authorize_match_access_scorer_denied_owner_action(auth_service, m
     assert "required role" in str(exc_info.value)
 
 
-@pytest.mark.anyio
+@sync
 async def test_authorize_match_access_viewer_denied_mutation(auth_service, mock_match_access_repo):
     mock_match_access_repo.get_match_auth_context.return_value = MatchAuthContext(
         match_exists=True,
@@ -119,7 +120,7 @@ async def test_authorize_match_access_viewer_denied_mutation(auth_service, mock_
         await auth_service.authorize_match_access(1, viewer, [MatchUserRole.OWNER, MatchUserRole.SCORER])
 
 
-@pytest.mark.anyio
+@sync
 async def test_require_match_access_guard_fails_closed_on_missing_id():
     guard = require_match_access([MatchUserRole.OWNER])
     request = MagicMock()
@@ -132,7 +133,7 @@ async def test_require_match_access_guard_fails_closed_on_missing_id():
     assert "Missing match ID" in exc_info.value.detail
 
 
-@pytest.mark.anyio
+@sync
 async def test_require_match_access_guard_fails_closed_on_invalid_id():
     guard = require_match_access([MatchUserRole.OWNER])
     request = MagicMock()
@@ -145,7 +146,7 @@ async def test_require_match_access_guard_fails_closed_on_invalid_id():
     assert "Invalid match ID" in exc_info.value.detail
 
 
-@pytest.mark.anyio
+@sync
 async def test_require_match_access_guard_fails_closed_on_negative_or_zero_id():
     guard = require_match_access([MatchUserRole.OWNER])
     service = AsyncMock()
@@ -159,7 +160,7 @@ async def test_require_match_access_guard_fails_closed_on_negative_or_zero_id():
         assert "Invalid match ID" in exc_info.value.detail
 
 
-@pytest.mark.anyio
+@sync
 async def test_require_match_access_guard_translates_domain_exceptions_to_http():
     guard = require_match_access([MatchUserRole.OWNER])
     request = MagicMock()
