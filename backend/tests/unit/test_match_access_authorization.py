@@ -3,6 +3,11 @@ from unittest.mock import AsyncMock, MagicMock
 from fastapi import HTTPException
 from app.api.deps import require_match_access
 from app.domain.enums import MatchUserRole
+from app.domain.exceptions import (
+    AccessDeniedError,
+    AuthenticationRequiredError,
+    EntityNotFoundError,
+)
 from app.models.user import User
 from app.repositories.match_access import MatchAuthContext
 from app.services.match_access import MatchAccessService
@@ -36,9 +41,9 @@ async def test_authorize_match_access_nonexistent_match(auth_service, mock_match
         has_access_records=False,
     )
     user = User(id=1, username="test", is_superuser=False)
-    # Endpoint handles 404
-    result = await auth_service.authorize_match_access(999, user, [MatchUserRole.OWNER, MatchUserRole.SCORER])
-    assert result == user
+    with pytest.raises(EntityNotFoundError) as exc_info:
+        await auth_service.authorize_match_access(999, user, [MatchUserRole.OWNER, MatchUserRole.SCORER])
+    assert "999 not found" in str(exc_info.value)
 
 
 @pytest.mark.anyio
@@ -60,9 +65,8 @@ async def test_authorize_match_access_unauthenticated_on_assigned_match(auth_ser
         user_role=None,
         has_access_records=True,
     )
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AuthenticationRequiredError):
         await auth_service.authorize_match_access(1, None, [MatchUserRole.OWNER, MatchUserRole.SCORER])
-    assert exc_info.value.status_code == 401
 
 
 @pytest.mark.anyio
@@ -98,10 +102,9 @@ async def test_authorize_match_access_scorer_denied_owner_action(auth_service, m
         has_access_records=True,
     )
     scorer = User(id=6, username="scorer", is_superuser=False)
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AccessDeniedError) as exc_info:
         await auth_service.authorize_match_access(1, scorer, [MatchUserRole.OWNER])
-    assert exc_info.value.status_code == 403
-    assert "required role" in exc_info.value.detail
+    assert "required role" in str(exc_info.value)
 
 
 @pytest.mark.anyio
@@ -112,9 +115,8 @@ async def test_authorize_match_access_viewer_denied_mutation(auth_service, mock_
         has_access_records=True,
     )
     viewer = User(id=7, username="viewer", is_superuser=False)
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AccessDeniedError):
         await auth_service.authorize_match_access(1, viewer, [MatchUserRole.OWNER, MatchUserRole.SCORER])
-    assert exc_info.value.status_code == 403
 
 
 @pytest.mark.anyio
@@ -141,3 +143,44 @@ async def test_require_match_access_guard_fails_closed_on_invalid_id():
         await guard(request=request, match_access_service=service, current_user=None)
     assert exc_info.value.status_code == 400
     assert "Invalid match ID" in exc_info.value.detail
+
+
+@pytest.mark.anyio
+async def test_require_match_access_guard_fails_closed_on_negative_or_zero_id():
+    guard = require_match_access([MatchUserRole.OWNER])
+    service = AsyncMock()
+
+    for bad_id in ["-1", "0"]:
+        request = MagicMock()
+        request.path_params = {"match_id": bad_id}
+        with pytest.raises(HTTPException) as exc_info:
+            await guard(request=request, match_access_service=service, current_user=None)
+        assert exc_info.value.status_code == 400
+        assert "Invalid match ID" in exc_info.value.detail
+
+
+@pytest.mark.anyio
+async def test_require_match_access_guard_translates_domain_exceptions_to_http():
+    guard = require_match_access([MatchUserRole.OWNER])
+    request = MagicMock()
+    request.path_params = {"match_id": "1"}
+
+    # Test 401 translation
+    service = AsyncMock()
+    service.authorize_match_access.side_effect = AuthenticationRequiredError("Auth needed")
+    with pytest.raises(HTTPException) as exc1:
+        await guard(request=request, match_access_service=service, current_user=None)
+    assert exc1.value.status_code == 401
+    assert exc1.value.headers == {"WWW-Authenticate": "Bearer"}
+
+    # Test 403 translation
+    service.authorize_match_access.side_effect = AccessDeniedError("Forbidden")
+    with pytest.raises(HTTPException) as exc2:
+        await guard(request=request, match_access_service=service, current_user=None)
+    assert exc2.value.status_code == 403
+
+    # Test 404 translation
+    service.authorize_match_access.side_effect = EntityNotFoundError("Not found")
+    with pytest.raises(HTTPException) as exc3:
+        await guard(request=request, match_access_service=service, current_user=None)
+    assert exc3.value.status_code == 404

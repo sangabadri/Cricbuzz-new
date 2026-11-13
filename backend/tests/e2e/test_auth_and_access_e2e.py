@@ -160,3 +160,27 @@ async def test_match_access_authorization_guard_e2e(test_client: AsgiTestClient)
         headers={"Authorization": f"Bearer {token_b}"},
     )
     assert revoked_attempt.status_code == 403
+
+    # Fail-closed parameter checks: non-integer or <= 0 match IDs return 400
+    invalid_param_resp = await test_client.post(
+        "/api/v1/matches/not-an-id/toss",
+        json={"toss_winner": t1["id"], "toss_decision": "bat"},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    assert invalid_param_resp.status_code == 400
+    assert "Invalid match ID" in invalid_param_resp.json()["detail"]
+
+    negative_param_resp = await test_client.post(
+        "/api/v1/matches/-1/toss",
+        json={"toss_winner": t1["id"], "toss_decision": "bat"},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    assert negative_param_resp.status_code == 400
+
+    # Non-existent match ID returns 404
+    nonexistent_resp = await test_client.post(
+        "/api/v1/matches/9999/toss",
+        json={"toss_winner": t1["id"], "toss_decision": "bat"},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    assert nonexistent_resp.status_code == 404

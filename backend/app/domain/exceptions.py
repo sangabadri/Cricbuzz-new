@@ -34,3 +34,13 @@ class CreaseViolationError(CricketDomainError):
 class OverProgressionError(CricketDomainError):
     """Raised when bowler quota, over progression, or innings state rules are violated."""
     pass
+
+
+class AuthenticationRequiredError(CricketDomainError):
+    """Raised when authentication is required to access or modify a domain entity."""
+    pass
+
+
+class AccessDeniedError(CricketDomainError):
+    """Raised when an authenticated actor lacks the required authorization role."""
+    pass

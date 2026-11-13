@@ -5,6 +5,7 @@ import jwt
 from app.config import settings
 from app.database import get_db
 from app.domain.enums import MatchUserRole
+from app.domain.exceptions import AccessDeniedError, AuthenticationRequiredError, EntityNotFoundError
 from app.models.user import User
 from app.repositories.delivery import DeliveryRepository
 from app.repositories.innings import InningsRepository
@@ -161,16 +162,35 @@ def require_match_access(allowed_roles: list[MatchUserRole] | None = None):
 
         try:
             match_id = int(match_id_str)
+            if match_id <= 0:
+                raise ValueError()
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid match ID parameter in request path",
             )
 
-        return await match_access_service.authorize_match_access(
-            match_id=match_id,
-            user=current_user,
-            allowed_roles=allowed_roles,
-        )
+        try:
+            return await match_access_service.authorize_match_access(
+                match_id=match_id,
+                user=current_user,
+                allowed_roles=allowed_roles,
+            )
+        except AuthenticationRequiredError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=exc.message,
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        except AccessDeniedError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=exc.message,
+            )
+        except EntityNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=exc.message,
+            )
 
     return _guard

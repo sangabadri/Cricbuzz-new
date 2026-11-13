@@ -36,5 +36,6 @@ pnpm-debug.log*
 *.sw?
 
 # Agent scratch/logs
+.agents/.agents/
 .agents/teamwork/
 .agents/**/*.log

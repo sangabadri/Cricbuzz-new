@@ -1,6 +1,10 @@
-from fastapi import HTTPException, status
 from app.domain.enums import MatchUserRole
-from app.domain.exceptions import EntityNotFoundError, RuleViolationError
+from app.domain.exceptions import (
+    AccessDeniedError,
+    AuthenticationRequiredError,
+    EntityNotFoundError,
+    RuleViolationError,
+)
 from app.models.match_access import MatchAccess
 from app.models.user import User
 from app.repositories.match import MatchRepository
@@ -100,8 +104,7 @@ class MatchAccessService:
             user_id=user.id if user else None,
         )
         if not context.match_exists:
-            # Let the endpoint itself handle 404 EntityNotFoundError
-            return user
+            raise EntityNotFoundError(f"Match with ID {match_id} not found")
 
         # Legacy / unassigned match compatibility:
         # If no access entries exist for this match, permit open access (historical fixtures & tests)
@@ -109,11 +112,7 @@ class MatchAccessService:
             return user
 
         if not user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication required for this match",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+            raise AuthenticationRequiredError("Authentication required for this match")
 
         if getattr(user, "is_superuser", False):
             return user
@@ -122,12 +121,6 @@ class MatchAccessService:
             return user
 
         if context.user_role is not None:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You do not have the required role for this match",
-            )
+            raise AccessDeniedError("You do not have the required role for this match")
 
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to modify this match",
-        )
+        raise AccessDeniedError("You do not have permission to modify this match")
