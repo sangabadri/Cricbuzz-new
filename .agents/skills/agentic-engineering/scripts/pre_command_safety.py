@@ -3,7 +3,7 @@
 pre_command_safety.py: High-speed (< 20ms) Negative Safety Hook for Antigravity.
 
 Intercepts PreToolUse for `run_command`.
-Blocks destructive commands per docs/checklists/safety.md:
+Blocks destructive commands per .agents/skills/agentic-engineering/references/checklists/safety.md:
 - git push --force / -f
 - git reset --hard
 - drop table / database / truncate

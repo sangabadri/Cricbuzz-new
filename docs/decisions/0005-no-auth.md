@@ -10,7 +10,7 @@ The implementation introduced significant architectural drift, boundary leaks, p
 
 ## Decision & Guardrails for Agents
 1. **Do not expand broken patterns**: Agents must NOT add new endpoints or screens that copy the broken patterns in `api/deps.py` (e.g. ad-hoc SQL in dependency injection, sniffing `request.path_params`, or raising `RuleViolationError` for auth failures).
-2. **Dedicated remediation tasks only**: Any work on authentication, authorization guards, or layout must be treated as a **Large Task** (`docs/process/03-large-feature.md`) or dedicated bugfix/refactoring task.
+2. **Dedicated remediation tasks only**: Any work on authentication, authorization guards, or layout must be treated as a **Large Task** (`.agents/skills/agentic-engineering/references/processes/03-large-feature.md`) or dedicated bugfix/refactoring task.
 3. **Preserve public spectator access**: All match viewing and spectator scorecard endpoints must remain completely public and unauthenticated.
 4. **Fix build first**: The TypeScript spread error in `AuthContext.test.tsx` must be corrected before making further frontend changes.
 
