@@ -5,7 +5,6 @@ import { WicketModal } from '../../components/scorer/modals/WicketModal';
 import { StartInningsModal } from '../../components/scorer/modals/StartInningsModal';
 import { useScorerModals } from '../../hooks/useScorerModals';
 import { renderHook, act } from '@testing-library/react';
-import { cricketApi, api } from '../../lib/api-client';
 import type { SquadResponse } from '../../types/cricket';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useScorerActions } from '../../hooks/useScorerActions';
@@ -38,7 +37,7 @@ const mockBattingSquad: SquadResponse = {
   ],
 };
 
-describe('Stage 2 Architecture: Modal Form Encapsulation & API Client', () => {
+describe('Scorer Form Encapsulation & Keydown Stabilization', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -162,69 +161,7 @@ describe('Stage 2 Architecture: Modal Form Encapsulation & API Client', () => {
     });
   });
 
-  describe('2. API Client Correctness & Missing Endpoints', () => {
-    it('cricketApi.patchLastDelivery calls PATCH /matches/{id}/innings/{number}/deliveries/last', async () => {
-      const mockDelivery = {
-        id: 42,
-        innings_id: 1,
-        over: 0,
-        ball: 3,
-        bowler_id: 201,
-        batsman_id: 101,
-        non_striker_id: 102,
-        runs: 6,
-        extras: 0,
-      };
-
-      const spy = vi.spyOn(api, 'patch').mockResolvedValueOnce({ data: mockDelivery });
-
-      const patchPayload = { runs: 6, commentary: 'Smashed over deep mid-wicket for six!' };
-      const response = await cricketApi.patchLastDelivery(1, 1, patchPayload);
-
-      expect(spy).toHaveBeenCalledWith('/matches/1/innings/1/deliveries/last', patchPayload);
-      expect(response).toEqual(mockDelivery);
-    });
-
-    it('cricketApi.abandonMatch calls POST /matches/{id}/abandon and returns MatchResponse', async () => {
-      const mockAbandonedMatch = {
-        id: 5,
-        team_a: 1,
-        team_b: 2,
-        venue: 'Melbourne',
-        format: 't20' as const,
-        match_date: '2026-11-08T00:00:00Z',
-        status: 'abandoned' as const,
-      };
-
-      const spy = vi.spyOn(api, 'post').mockResolvedValueOnce({ data: mockAbandonedMatch });
-
-      const response = await cricketApi.abandonMatch(5);
-
-      expect(spy).toHaveBeenCalledWith('/matches/5/abandon');
-      expect(response.status).toBe('abandoned');
-      expect(response.id).toBe(5);
-    });
-
-    it('cricketApi.setBowler returns InningsResponse', async () => {
-      const mockInnings = {
-        id: 10,
-        match_id: 1,
-        innings_number: 1,
-        batting_team_id: 1,
-        bowling_team_id: 2,
-        status: 'in_progress' as const,
-        current_bowler_id: 201,
-      };
-
-      const spy = vi.spyOn(api, 'post').mockResolvedValueOnce({ data: mockInnings });
-
-      const response = await cricketApi.setBowler(1, 1, 201);
-      expect(spy).toHaveBeenCalledWith('/matches/1/innings/1/set-bowler', { bowler_id: 201 });
-      expect(response).toEqual(mockInnings);
-    });
-  });
-
-  describe('3. ScorerConsole Keydown Listener Stabilization', () => {
+  describe('2. ScorerConsole Keydown Listener Stabilization', () => {
     it('binds keydown listener once and does not unbind/rebind on renders', () => {
       const addEventListenerSpy = vi.spyOn(window, 'addEventListener');
       const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');

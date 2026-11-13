@@ -1,4 +1,3 @@
-import functools
 import pytest
 from unittest.mock import AsyncMock
 from app.domain.exceptions import CreaseViolationError, EntityNotFoundError, OverProgressionError, RuleViolationError
@@ -13,20 +12,7 @@ from app.schemas.match import MatchCreate, MatchToss
 from app.services.delivery import DeliveryService
 from app.services.innings import InningsService
 from app.services.match import MatchService
-
-
-def sync(async_fn):
-    """Synchronous coroutine runner for mock-driven service tests without Windows socket deadlocks."""
-    @functools.wraps(async_fn)
-    def wrapper(*args, **kwargs):
-        coro = async_fn(*args, **kwargs)
-        val = None
-        try:
-            while True:
-                val = coro.send(val)
-        except StopIteration as exc:
-            return exc.value
-    return wrapper
+from tests.conftest import sync
 
 
 @sync

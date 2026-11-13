@@ -111,7 +111,7 @@ const mockLiveTicker: LiveMatchResponse = {
   last_event_is_wicket: false,
 };
 
-describe('Stage 1 Domain Correctness & Invariants', () => {
+describe('Scorer Crease, Dismissals & Modals Invariants', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });

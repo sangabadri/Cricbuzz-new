@@ -25,15 +25,20 @@ from app.schemas.squad import SquadCreate
 from app.repositories.match_access import MatchAuthContext
 from app.api.deps import (
     get_auth_service,
+    get_delivery_repo,
     get_delivery_service,
+    get_innings_repo,
     get_innings_service,
     get_match_access_repo,
     get_match_access_service,
     get_match_repo,
     get_match_service,
+    get_player_repo,
     get_player_service,
     get_scorecard_service,
+    get_squad_repo,
     get_squad_service,
+    get_team_repo,
     get_team_service,
     get_user_repo,
     get_refresh_token_repo,
@@ -644,6 +649,26 @@ def test_client(in_memory_store, bypass_startup_lifespan):
     async def _refresh_token_r():
         return refresh_token_repo
 
+    async def _team_r():
+        return team_repo
+
+    async def _player_r():
+        return player_repo
+
+    async def _squad_r():
+        return squad_repo
+
+    async def _innings_r():
+        return innings_repo
+
+    async def _delivery_r():
+        return delivery_repo
+
+    app.dependency_overrides[get_team_repo] = _team_r
+    app.dependency_overrides[get_player_repo] = _player_r
+    app.dependency_overrides[get_squad_repo] = _squad_r
+    app.dependency_overrides[get_innings_repo] = _innings_r
+    app.dependency_overrides[get_delivery_repo] = _delivery_r
     app.dependency_overrides[get_team_service] = _team
     app.dependency_overrides[get_player_service] = _player
     app.dependency_overrides[get_match_repo] = _match_r

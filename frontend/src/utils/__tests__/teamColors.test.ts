@@ -110,5 +110,27 @@ describe('getTeamIdentity', () => {
       const validPrimaryColors = ['#0284c7', '#7c3aed', '#ea580c', '#0d9488'];
       expect(validPrimaryColors).toContain(identity.primaryColor);
     });
+
+    it('handles tabs, newlines, and irregular whitespace in multi-word team names', () => {
+      const identity = getTeamIdentity('  Kolkata \t\n Knight   Riders  ');
+      expect(identity.shortCode).toBe('KKR');
+      expect(identity.name).toBe('  Kolkata \t\n Knight   Riders  ');
+    });
+
+    it('handles two-word team names where the second word is a single letter', () => {
+      const identity = getTeamIdentity('Team X', 7);
+      expect(identity.shortCode).toBe('TX');
+    });
+
+    it('handles 1-letter single-word team name by falling back to T + teamId', () => {
+      const identity = getTeamIdentity('A', 4);
+      expect(identity.shortCode).toBe('T4');
+    });
+
+    it('handles teamId as undefined and teamName as empty string', () => {
+      const identity = getTeamIdentity('', undefined);
+      expect(identity.name).toBe('Team');
+      expect(identity.shortCode).toBe('T1');
+    });
   });
 });

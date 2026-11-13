@@ -33,18 +33,28 @@ oauth2_scheme = OAuth2PasswordBearer(
 )
 
 
-async def get_team_service(session: AsyncSession = Depends(get_db)) -> TeamService:
-    team_repo = TeamRepository(session)
-    return TeamService(team_repo)
+async def get_team_repo(session: AsyncSession = Depends(get_db)) -> TeamRepository:
+    return TeamRepository(session)
 
 
-async def get_player_service(session: AsyncSession = Depends(get_db)) -> PlayerService:
-    player_repo = PlayerRepository(session)
-    return PlayerService(player_repo)
+async def get_player_repo(session: AsyncSession = Depends(get_db)) -> PlayerRepository:
+    return PlayerRepository(session)
 
 
 async def get_match_repo(session: AsyncSession = Depends(get_db)) -> MatchRepository:
     return MatchRepository(session)
+
+
+async def get_squad_repo(session: AsyncSession = Depends(get_db)) -> SquadRepository:
+    return SquadRepository(session)
+
+
+async def get_innings_repo(session: AsyncSession = Depends(get_db)) -> InningsRepository:
+    return InningsRepository(session)
+
+
+async def get_delivery_repo(session: AsyncSession = Depends(get_db)) -> DeliveryRepository:
+    return DeliveryRepository(session)
 
 
 async def get_user_repo(session: AsyncSession = Depends(get_db)) -> UserRepository:
@@ -59,45 +69,60 @@ async def get_match_access_repo(session: AsyncSession = Depends(get_db)) -> Matc
     return MatchAccessRepository(session)
 
 
+async def get_team_service(
+    team_repo: TeamRepository = Depends(get_team_repo),
+) -> TeamService:
+    return TeamService(team_repo)
+
+
+async def get_player_service(
+    player_repo: PlayerRepository = Depends(get_player_repo),
+) -> PlayerService:
+    return PlayerService(player_repo)
+
+
 async def get_match_service(
-    session: AsyncSession = Depends(get_db),
     match_repo: MatchRepository = Depends(get_match_repo),
+    team_repo: TeamRepository = Depends(get_team_repo),
+    squad_repo: SquadRepository = Depends(get_squad_repo),
+    innings_repo: InningsRepository = Depends(get_innings_repo),
     match_access_repo: MatchAccessRepository = Depends(get_match_access_repo),
 ) -> MatchService:
-    team_repo = TeamRepository(session)
-    squad_repo = SquadRepository(session)
-    innings_repo = InningsRepository(session)
     return MatchService(match_repo, team_repo, squad_repo, innings_repo, match_access_repo)
 
 
-async def get_squad_service(session: AsyncSession = Depends(get_db)) -> SquadService:
-    squad_repo = SquadRepository(session)
-    match_repo = MatchRepository(session)
+async def get_squad_service(
+    squad_repo: SquadRepository = Depends(get_squad_repo),
+    match_repo: MatchRepository = Depends(get_match_repo),
+) -> SquadService:
     return SquadService(squad_repo, match_repo)
 
 
-async def get_innings_service(session: AsyncSession = Depends(get_db)) -> InningsService:
-    innings_repo = InningsRepository(session)
-    match_repo = MatchRepository(session)
-    delivery_repo = DeliveryRepository(session)
-    squad_repo = SquadRepository(session)
+async def get_innings_service(
+    innings_repo: InningsRepository = Depends(get_innings_repo),
+    match_repo: MatchRepository = Depends(get_match_repo),
+    delivery_repo: DeliveryRepository = Depends(get_delivery_repo),
+    squad_repo: SquadRepository = Depends(get_squad_repo),
+) -> InningsService:
     return InningsService(innings_repo, match_repo, delivery_repo, squad_repo)
 
 
-async def get_delivery_service(session: AsyncSession = Depends(get_db)) -> DeliveryService:
-    delivery_repo = DeliveryRepository(session)
-    innings_repo = InningsRepository(session)
-    match_repo = MatchRepository(session)
-    squad_repo = SquadRepository(session)
+async def get_delivery_service(
+    delivery_repo: DeliveryRepository = Depends(get_delivery_repo),
+    innings_repo: InningsRepository = Depends(get_innings_repo),
+    match_repo: MatchRepository = Depends(get_match_repo),
+    squad_repo: SquadRepository = Depends(get_squad_repo),
+) -> DeliveryService:
     return DeliveryService(delivery_repo, innings_repo, match_repo, squad_repo)
 
 
-async def get_scorecard_service(session: AsyncSession = Depends(get_db)) -> ScorecardService:
-    match_repo = MatchRepository(session)
-    innings_repo = InningsRepository(session)
-    delivery_repo = DeliveryRepository(session)
-    player_repo = PlayerRepository(session)
-    team_repo = TeamRepository(session)
+async def get_scorecard_service(
+    match_repo: MatchRepository = Depends(get_match_repo),
+    innings_repo: InningsRepository = Depends(get_innings_repo),
+    delivery_repo: DeliveryRepository = Depends(get_delivery_repo),
+    player_repo: PlayerRepository = Depends(get_player_repo),
+    team_repo: TeamRepository = Depends(get_team_repo),
+) -> ScorecardService:
     return ScorecardService(match_repo, innings_repo, delivery_repo, player_repo, team_repo)
 
 

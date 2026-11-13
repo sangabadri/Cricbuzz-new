@@ -1,4 +1,3 @@
-import functools
 import pytest
 from unittest.mock import AsyncMock
 from app.models.delivery import Delivery
@@ -8,20 +7,7 @@ from app.models.player import Player
 from app.models.team import Team
 from app.schemas.enums import BattingStyle, ExtraType, InningsStatus, MatchFormat, MatchStatus, Role, WicketType
 from app.services.scorecard import ScorecardService, to_overs_record
-
-
-def sync(async_fn):
-    """Synchronous coroutine runner for mock-driven service tests without Windows socket deadlocks."""
-    @functools.wraps(async_fn)
-    def wrapper(*args, **kwargs):
-        coro = async_fn(*args, **kwargs)
-        val = None
-        try:
-            while True:
-                val = coro.send(val)
-        except StopIteration as exc:
-            return exc.value
-    return wrapper
+from tests.conftest import sync
 
 
 @pytest.fixture
@@ -336,3 +322,48 @@ async def test_scorecard_multiple_wickets_partnerships_and_incoming_batter_inclu
     assert scorecard.fall_of_wickets[0].player_id == 1
     assert scorecard.fall_of_wickets[1].wicket_number == 2
     assert scorecard.fall_of_wickets[1].player_id == 3
+
+
+def test_overs_record_conversion():
+    # 0 legal balls
+    ov0 = to_overs_record(0)
+    assert ov0.completed_overs == 0
+    assert ov0.balls == 0
+    assert ov0.total_legal_balls == 0
+
+    # 5 legal balls -> 0.5
+    ov5 = to_overs_record(5)
+    assert ov5.completed_overs == 0
+    assert ov5.balls == 5
+    assert ov5.total_legal_balls == 5
+
+    # 6 legal balls -> 1.0
+    ov6 = to_overs_record(6)
+    assert ov6.completed_overs == 1
+    assert ov6.balls == 0
+    assert ov6.total_legal_balls == 6
+
+    # 23 legal balls -> 3.5
+    ov23 = to_overs_record(23)
+    assert ov23.completed_overs == 3
+    assert ov23.balls == 5
+    assert ov23.total_legal_balls == 23
+
+    # 120 legal balls (20 overs in T20) -> 20.0
+    ov120 = to_overs_record(120)
+    assert ov120.completed_overs == 20
+    assert ov120.balls == 0
+    assert ov120.total_legal_balls == 120
+
+
+def test_overs_record_with_configured_balls_per_over():
+    # 10 balls with 6 balls_per_over -> 1.4
+    ov1 = to_overs_record(10, balls_per_over=6)
+    assert ov1.completed_overs == 1
+    assert ov1.balls == 4
+
+    # 10 balls with 8 balls_per_over -> 1.2
+    ov2 = to_overs_record(10, balls_per_over=8)
+    assert ov2.completed_overs == 1
+    assert ov2.balls == 2
+    assert ov2.total_legal_balls == 10

@@ -22,13 +22,17 @@ The user requested removing redundant, useless, and duplicated tests across the 
 
 ## 3. Execution Slices
 
-### Slice 1: Backend Test Suite Consolidation
+### Slice 1: Backend Test Suite Consolidation & `deps.py` Harmonization
 1. Merge the two tests from `backend/tests/unit/test_scorecard_calculation.py` (`test_overs_record_conversion` and `test_overs_record_with_configured_balls_per_over`) into `backend/tests/unit/test_scorecard_service.py`.
 2. Delete `backend/tests/unit/test_scorecard_calculation.py`.
 3. In `backend/tests/unit/test_services.py`:
    - Import `sync` from `tests.conftest` to eliminate the duplicate `def sync(...)` helper.
    - Retain the core unit tests for match toss rules and target calculation.
-4. Run `pytest backend/tests` to verify 100% pass rate.
+4. In `backend/app/api/deps.py`:
+   - Add dedicated repository dependency providers (`get_team_repo`, `get_player_repo`, `get_squad_repo`, `get_innings_repo`, `get_delivery_repo`).
+   - Harmonize all service factory functions to receive repositories via `Depends(...)` instead of directly instantiating them from `session`.
+   - Update `backend/tests/conftest.py` with repository dependency overrides for the test client.
+5. Run `pytest backend/tests` to verify 100% pass rate.
 
 ### Slice 2: Frontend Test Pruning & Descriptive Renaming
 1. Ensure unique edge cases from `boundaries.challenger.test.tsx` (e.g. whitespace handling, multi-word team abbreviations) are merged into `src/utils/__tests__/teamColors.test.ts`.

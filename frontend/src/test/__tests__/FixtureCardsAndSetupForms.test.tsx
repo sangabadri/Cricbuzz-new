@@ -20,7 +20,7 @@ function createTestQueryClient() {
   });
 }
 
-describe('Stage 3 Visual, UX & Decomposition Tests', () => {
+describe('Fixture Cards & Setup Forms', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
