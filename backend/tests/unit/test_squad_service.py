@@ -1,4 +1,3 @@
-import functools
 import pytest
 from unittest.mock import AsyncMock
 from app.domain.exceptions import EntityNotFoundError, RuleViolationError
@@ -7,20 +6,7 @@ from app.models.squad import Squad, SquadPlayer
 from app.schemas.enums import MatchFormat, MatchStatus
 from app.schemas.squad import SquadCreate, SquadPlayerItem
 from app.services.squad import SquadService
-
-
-def sync(async_fn):
-    """Synchronous coroutine runner for mock-driven service tests without Windows socket deadlocks."""
-    @functools.wraps(async_fn)
-    def wrapper(*args, **kwargs):
-        coro = async_fn(*args, **kwargs)
-        val = None
-        try:
-            while True:
-                val = coro.send(val)
-        except StopIteration as exc:
-            return exc.value
-    return wrapper
+from tests.conftest import sync
 
 
 @pytest.fixture

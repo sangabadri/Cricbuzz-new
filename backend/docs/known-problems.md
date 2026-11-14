@@ -67,5 +67,5 @@ Measured on 2026-11-12 at commit `225e432`.
 - [RESOLVED - 2026-11-14] Comments in `SquadService.create_squad` number two steps "6": Renumbered cleanly to steps 6, 7, 8.
 - `JWT_SECRET_KEY` in `config.py` defaults to a hardcoded string. Must require an environment variable in production.
 - [RESOLVED - 2026-11-14] `CORS_ORIGINS` in `config.py` uses hardcoded localhost origins: Resolved by adding dynamic Pydantic validator supporting JSON array strings, comma-separated environment variables, and fallback dev origins.
-- `sync` test helper exists in multiple test modules. Centralize in `conftest.py`.
+- [RESOLVED - 2026-11-14] `sync` test helper exists in multiple test modules: Centralized exclusively in `tests/conftest.py` with all test modules importing it cleanly.
 - `main.py` imports all models by name just so tables get created on startup (`Base.metadata.create_all`). Alembic migrations should replace automatic `create_all`.
