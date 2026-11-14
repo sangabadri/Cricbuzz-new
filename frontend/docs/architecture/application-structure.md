@@ -52,12 +52,20 @@ frontend/src/
 | **Pure Helper Function** | `lib/` or feature folder | Pure input -> output. No React or DOM dependencies. |
 | **Backend Response Type** | `types/` | Matches Pydantic schemas in `backend/app/schemas/` exactly. |
 
-### Scorer Console Decomposition (`src/features/scoring/`)
+### Scorer Console & State Hooks (`src/features/scoring/`, `src/hooks/`)
 - `ScorerConsolePage`: Orchestrates the console workspace, loads state, and hosts modal dialogs (< 250 lines).
 - `ScorerHeader`: Displays breadcrumbs, innings selector, access modal trigger, and Match Center shortcut.
 - `MatchCompletedBanner`: Displays winner details and Man of the Match nomination form.
 - `InningsTransitionPrompts`: Shows innings break targets or opening batter setup prompts.
 - `useScorerKeyboardShortcuts`: Manages non-intrusive physical key bindings for ball recording and wicket triggers.
+- `useScorerMutations`: Encapsulates TanStack Query mutation definitions and cache invalidation side effects for scoring operations.
+- `useScorerActions`: Pure action orchestration layer handling confirmation states, modal workflows, and validation before delegating to mutations.
+
+### Dashboard Overview Decomposition (`src/features/dashboard/`)
+- `DashboardOverviewPage`: Composes overall dashboard metrics, quick workflows, and recent match activity (< 100 lines).
+- `DashboardMetricsGrid`: Visualizes system-wide totals including active tournaments, ongoing matches, and match counts.
+- `DashboardWorkflowsGrid`: Quick action shortcuts for scheduling matches, creating teams, and managing squads.
+- `DashboardRecentMatchesTable`: Tabular view of recent match records with real-time status indicators and deep links.
 
 ---
 

@@ -1,8 +1,6 @@
 import { useCallback } from 'react';
-import { useMutation } from '@tanstack/react-query';
-import { cricketApi } from '../lib/api-client';
+import { useScorerMutations } from './useScorerMutations';
 import type {
-  DeliveryCreate,
   ExtraType,
   LiveScorerStateResponse,
   SquadResponse,
@@ -82,96 +80,31 @@ export function useScorerActions({
     momPlayerId: modalMomPlayerId,
   } = modals;
 
-  // Mutations
-  const recordDeliveryMutation = useMutation({
-    mutationFn: (data: DeliveryCreate) =>
-      cricketApi.recordDelivery(matchId, inningsNumber, data),
-    onSuccess: (updatedState) => {
-      invalidateAll();
-      if (updatedState.next_action === 'SET_BOWLER') {
-        setShowBowlerModal(true);
-      } else if (updatedState.next_action === 'SET_BATTER') {
-        setShowIncomingBatterModal(true);
-      }
-    },
-    onError: (err: unknown) => {
-      notify('Error recording delivery: ' + getErrorMessage(err), 'error');
-    },
+  const {
+    recordDelivery,
+    isRecordingDelivery,
+    undoDelivery,
+    isUndoing,
+    swapStrike,
+    isSwappingStrike,
+    setBowler,
+    isSettingBowler,
+    setBatter,
+    isSettingBatter,
+    startInnings,
+    isStartingInnings,
+    awardMOM,
+    isAwardingMOM,
+  } = useScorerMutations({
+    matchId,
+    inningsNumber,
+    invalidateAll,
+    notify,
+    getErrorMessage,
+    setShowBowlerModal,
+    setShowIncomingBatterModal,
+    setShowStartInningsModal,
   });
-
-  const undoMutation = useMutation({
-    mutationFn: () => cricketApi.undoLastDelivery(matchId, inningsNumber),
-    onSuccess: () => {
-      invalidateAll();
-    },
-    onError: (err: unknown) => {
-      notify('Error undoing delivery: ' + getErrorMessage(err), 'error');
-    },
-  });
-
-  const swapStrikeMutation = useMutation({
-    mutationFn: () => cricketApi.swapStrike(matchId, inningsNumber),
-    onSuccess: () => {
-      invalidateAll();
-    },
-    onError: (err: unknown) => {
-      notify('Error swapping strike: ' + getErrorMessage(err), 'error');
-    },
-  });
-
-  const setBowlerMutation = useMutation({
-    mutationFn: (bId: number) => cricketApi.setBowler(matchId, inningsNumber, bId),
-    onSuccess: () => {
-      setShowBowlerModal(false);
-      invalidateAll();
-    },
-    onError: (err: unknown) => {
-      notify('Error assigning bowler: ' + getErrorMessage(err), 'error');
-    },
-  });
-
-  const setBatterMutation = useMutation({
-    mutationFn: (pId: number) => cricketApi.setIncomingBatter(matchId, inningsNumber, pId),
-    onSuccess: () => {
-      setShowIncomingBatterModal(false);
-      invalidateAll();
-    },
-    onError: (err: unknown) => {
-      notify('Error assigning batter: ' + getErrorMessage(err), 'error');
-    },
-  });
-
-  const startInningsMutation = useMutation({
-    mutationFn: (req: { sId: number; nsId: number; bId: number }) =>
-      cricketApi.startInnings(matchId, inningsNumber, req.sId, req.nsId, req.bId),
-    onSuccess: () => {
-      setShowStartInningsModal(false);
-      invalidateAll();
-    },
-    onError: (err: unknown) => {
-      notify('Error starting innings: ' + getErrorMessage(err), 'error');
-    },
-  });
-
-  const awardMOMMutation = useMutation({
-    mutationFn: (pId: number) => cricketApi.awardMOM(matchId, pId),
-    onSuccess: () => {
-      invalidateAll();
-      notify('Player of the Match awarded successfully!', 'success');
-    },
-    onError: (err: unknown) => {
-      notify('Error awarding MOM: ' + getErrorMessage(err), 'error');
-    },
-  });
-
-  // Destructured stable mutation triggers from React Query
-  const { mutate: recordDelivery } = recordDeliveryMutation;
-  const { mutate: undoDelivery } = undoMutation;
-  const { mutate: swapStrike } = swapStrikeMutation;
-  const { mutate: setBowler } = setBowlerMutation;
-  const { mutate: setBatter } = setBatterMutation;
-  const { mutate: startInnings } = startInningsMutation;
-  const { mutate: awardMOM } = awardMOMMutation;
 
   // Keypad Handlers wrapped in useCallback with stable dependencies
   const handleRuns = useCallback((runs: number) => {
@@ -325,13 +258,13 @@ export function useScorerActions({
     handleSetBatter,
     handleAwardMOM,
 
-    isRecordingDelivery: recordDeliveryMutation.isPending,
-    isUndoing: undoMutation.isPending,
-    isSwappingStrike: swapStrikeMutation.isPending,
-    isSettingBowler: setBowlerMutation.isPending,
-    isSettingBatter: setBatterMutation.isPending,
-    isStartingInnings: startInningsMutation.isPending,
-    isAwardingMOM: awardMOMMutation.isPending,
+    isRecordingDelivery,
+    isUndoing,
+    isSwappingStrike,
+    isSettingBowler,
+    isSettingBatter,
+    isStartingInnings,
+    isAwardingMOM,
   };
 }
 
