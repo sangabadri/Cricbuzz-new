@@ -7,3 +7,4 @@ data:
   DB_PORT: "5432"
   DB_NAME: "cricbuzz"
   DB_USER: "cricuser"
+  REDIS_URL: "redis://cricbuzz-redis:6379/0"

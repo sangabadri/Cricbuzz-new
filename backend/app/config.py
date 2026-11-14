@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     API_V1_PREFIX: str = "/api/v1"
 
+    # Redis distributed cache & pub/sub settings
+    REDIS_URL: str | None = None
+    RATE_LIMITING_ENABLED: bool = True
+    RATE_LIMIT_PUBLIC_PER_MINUTE: int = 60
+    RATE_LIMIT_AUTH_PER_MINUTE: int = 10
+    TRUSTED_PROXIES: list[str] = ["127.0.0.1", "localhost"]
+
     # Authentication & JWT settings
     JWT_SECRET_KEY: str = "cricbuzz-dev-jwt-secret-key-32-chars-minimum-2026"
     JWT_ALGORITHM: str = "HS256"

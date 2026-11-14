@@ -55,15 +55,23 @@ This document defines the exact responsibilities, boundaries, and import constra
   - `InningsService` decomposes innings creation and opening batsman setup into `_validate_innings_prerequisites`, `_resolve_target_innings_number`, `_create_or_get_innings_1`, `_create_or_get_innings_2`, `_create_or_get_multi_innings`, and `_validate_start_squad_eligibility`.
   - `SquadService` constructs strongly-typed `SquadResponse` projections with resolved player identities without model attribute mutation (`setattr`).
   - `DemoSeedService` isolates procedural match, squad, toss, and innings generation from HTTP routers.
+  - `MatchEventBus` (`app/services/event_bus.py`) provides a multi-pod Pub/Sub broker with Redis Pub/Sub fan-out across replicas (`cricbuzz:match:{id}`), self-echo suppression, and zero-latency local `asyncio.Queue` fallback for real-time Server-Sent Events (SSE).
+  - `ScorecardCache` (`app/services/scorecard_cache.py`) provides a two-tiered (L1 in-memory bounded LRU, L2 Redis key-value) Cache-Aside pattern for immutable completed and abandoned matches (24h TTL), with active invalidation on match or delivery mutations.
+  - `redis_client.py` (`app/services/redis_client.py`) provides singleton async connection pooling (`redis.asyncio`), health check probes (`is_redis_healthy`), and graceful shutdown hooks.
 - Raises pure domain exceptions on invariant violations.
 
-### F. Routers Layer (`app/routers/`)
+### F. Middleware Layer (`app/middleware/`)
+- Pure ASGI middlewares executing request pre-processing and response post-processing.
+- **Components**:
+  - `DistributedRateLimitMiddleware`: Enforces distributed per-IP rate limits using atomic Redis Lua scripts (60 req/min for public spectator reads, 10 req/min for authentication). Attaches `X-RateLimit-*` and `Retry-After` headers, exempts infrastructure/docs endpoints, and implements a fail-open policy when Redis is unreachable.
+
+### G. Routers Layer (`app/routers/`)
 - Maps HTTP verbs and paths (`@router.post(...)`, `@router.get(...)`).
 - Extracts path parameters, query parameters, request bodies, and authentication dependencies.
 - Delegates execution to exactly **one** service method call.
 - Returns serialized response models.
 
-### G. Dependency Injection (`app/api/deps.py`)
+### H. Dependency Injection (`app/api/deps.py`)
 - Provides reusable FastAPI `Depends()` factories.
 - Instantiates repository instances from the active session (`get_*_repo`).
 - Wires repositories into service constructors (`get_*_service`).
