@@ -29,7 +29,7 @@ Do not fix these while doing other work. Do not make them worse. Fix them only i
 
 | File | Lines | Recommended Limit |
 |---|---|---|
-| `components/setup/ScheduleMatchForm.tsx` | 449 | < 150 (max 250) |
+| `components/setup/ScheduleMatchForm.tsx` | [RESOLVED - 2026-11-14] Decomposed from 449 lines to 205 lines across schedule/ sub-components | < 150 (max 250) |
 | `features/scoring/pages/ScorerConsolePage.tsx` | 433 | < 150 (max 250) |
 | `components/scorer/DeliveryKeypad.tsx` | [RESOLVED - 2026-11-14] Decomposed from 351 lines to 137 lines across keypad/ sub-components | < 150 (max 250) |
 | `hooks/useScorerActions.ts` | 337 | < 200 |
