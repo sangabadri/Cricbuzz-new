@@ -2,6 +2,7 @@ from app.domain.enums import InningsStatus, MatchStatus, TossDecision
 from app.domain.exceptions import EntityNotFoundError, RuleViolationError
 from app.domain.rules.formats import get_format_rules
 from app.models.innings import Innings
+from app.models.match import Match
 from app.repositories.delivery import DeliveryRepository
 from app.repositories.innings import InningsRepository
 from app.repositories.match import MatchRepository
@@ -28,6 +29,188 @@ class InningsService:
         self.delivery_repo = delivery_repo
         self.squad_repo = squad_repo
 
+    def _validate_innings_prerequisites(self, match: Match | None, match_id: int) -> None:
+        """Validates that match exists, is not terminated, and that the toss has concluded."""
+        if not match:
+            raise EntityNotFoundError(f"Match with ID {match_id} not found")
+        if match.status in (MatchStatus.COMPLETED, MatchStatus.ABANDONED):
+            raise RuleViolationError(f"Cannot create innings: Match is already {match.status.value}")
+        if match.status == MatchStatus.SCHEDULED or match.toss_winner is None or match.toss_decision is None:
+            raise RuleViolationError("Cannot start an innings before the toss is conducted")
+
+    def _resolve_target_innings_number(
+        self,
+        match: Match,
+        innings_in: InningsCreate,
+        existing_inn1: Innings | None,
+    ) -> int:
+        """Determines target innings number and verifies that format rules allow this innings."""
+        if innings_in.innings_number is not None:
+            target_innings_number = innings_in.innings_number
+        else:
+            if existing_inn1 is None or existing_inn1.status != InningsStatus.COMPLETED:
+                target_innings_number = 1
+            else:
+                target_innings_number = 2
+
+        format_rules = get_format_rules(match.format)
+        if target_innings_number > format_rules.total_innings:
+            fmt_str = match.format.value if hasattr(match.format, "value") else str(match.format)
+            raise RuleViolationError(
+                f"Cannot create Innings {target_innings_number}: Match format '{fmt_str}' only supports {format_rules.total_innings} innings"
+            )
+
+        return target_innings_number
+
+    async def _create_or_get_innings_1(
+        self,
+        match: Match,
+        match_teams: set[int],
+        innings_in: InningsCreate,
+        existing_inn1: Innings | None,
+    ) -> Innings:
+        """Derives toss-dictated batting order, checks idempotency, and creates Innings 1."""
+        other_team = match.team_b if match.toss_winner == match.team_a else match.team_a
+        if match.toss_decision == TossDecision.BAT:
+            expected_batting = match.toss_winner
+            expected_bowling = other_team
+        else:
+            expected_batting = other_team
+            expected_bowling = match.toss_winner
+
+        if innings_in.batting_team_id is not None:
+            if innings_in.batting_team_id not in match_teams:
+                raise RuleViolationError("Batting team must participate in this match")
+            if innings_in.batting_team_id != expected_batting:
+                raise RuleViolationError(
+                    f"Toss outcome dictates that Team {expected_batting} bats and Team {expected_bowling} bowls first"
+                )
+        if innings_in.bowling_team_id is not None:
+            if innings_in.bowling_team_id not in match_teams:
+                raise RuleViolationError("Bowling team must participate in this match")
+            if innings_in.bowling_team_id != expected_bowling:
+                raise RuleViolationError(
+                    f"Toss outcome dictates that Team {expected_batting} bats and Team {expected_bowling} bowls first"
+                )
+
+        if existing_inn1:
+            return existing_inn1
+
+        created_innings = await self.innings_repo.create(
+            match.id,
+            InningsCreate(
+                innings_number=1,
+                batting_team_id=expected_batting,
+                bowling_team_id=expected_bowling,
+                target=None,
+            ),
+        )
+
+        if match.status == MatchStatus.TOSS_DONE:
+            match.status = MatchStatus.LIVE
+            await self.match_repo.save(match)
+
+        return created_innings
+
+    async def _create_or_get_innings_2(
+        self,
+        match: Match,
+        match_teams: set[int],
+        innings_in: InningsCreate,
+        existing_inn1: Innings | None,
+    ) -> Innings:
+        """Validates Innings 1 completion, auto-derives chase target, and creates Innings 2."""
+        if not existing_inn1:
+            raise RuleViolationError("Cannot create Innings 2 before Innings 1 is created")
+        if existing_inn1.status != InningsStatus.COMPLETED:
+            raise RuleViolationError("Cannot create Innings 2 before Innings 1 is completed")
+
+        expected_batting = existing_inn1.bowling_team_id
+        expected_bowling = existing_inn1.batting_team_id
+
+        if innings_in.batting_team_id is not None:
+            if innings_in.batting_team_id not in match_teams:
+                raise RuleViolationError("Batting team must participate in this match")
+            if innings_in.batting_team_id != expected_batting:
+                raise RuleViolationError(
+                    f"Innings 2 batting team must be Team {expected_batting} "
+                    f"and bowling team must be Team {expected_bowling}"
+                )
+        if innings_in.bowling_team_id is not None:
+            if innings_in.bowling_team_id not in match_teams:
+                raise RuleViolationError("Bowling team must participate in this match")
+            if innings_in.bowling_team_id != expected_bowling:
+                raise RuleViolationError(
+                    f"Innings 2 batting team must be Team {expected_batting} "
+                    f"and bowling team must be Team {expected_bowling}"
+                )
+
+        if self.delivery_repo:
+            inn1_deliveries = await self.delivery_repo.list_by_innings(existing_inn1.id)
+            inn1_runs = sum(d.runs + d.extras for d in inn1_deliveries)
+            derived_target = inn1_runs + 1
+        else:
+            derived_target = innings_in.target
+
+        target_runs = innings_in.target if innings_in.target is not None else derived_target
+        if target_runs is None:
+            raise RuleViolationError("Target runs must be set for Innings 2")
+
+        existing_inn2 = await self.innings_repo.get_by_match_and_number(match.id, 2)
+        if existing_inn2:
+            return existing_inn2
+
+        created_innings = await self.innings_repo.create(
+            match.id,
+            InningsCreate(
+                innings_number=2,
+                batting_team_id=expected_batting,
+                bowling_team_id=expected_bowling,
+                target=target_runs,
+            ),
+        )
+
+        if match.status == MatchStatus.INNINGS_BREAK:
+            match.status = MatchStatus.LIVE
+            await self.match_repo.save(match)
+
+        return created_innings
+
+    async def _create_or_get_multi_innings(
+        self,
+        match: Match,
+        match_teams: set[int],
+        target_innings_number: int,
+        innings_in: InningsCreate,
+    ) -> Innings:
+        """Handles multi-innings formats (e.g. Test match innings 3 or 4)."""
+        prev_inn = await self.innings_repo.get_by_match_and_number(match.id, target_innings_number - 1)
+        if not prev_inn or prev_inn.status != InningsStatus.COMPLETED:
+            raise RuleViolationError(
+                f"Cannot create Innings {target_innings_number} before Innings {target_innings_number - 1} is completed"
+            )
+
+        existing_inn = await self.innings_repo.get_by_match_and_number(match.id, target_innings_number)
+        if existing_inn:
+            return existing_inn
+
+        if innings_in.batting_team_id is None or innings_in.bowling_team_id is None:
+            raise RuleViolationError("Batting and bowling teams must be provided for Innings > 2")
+        if innings_in.batting_team_id not in match_teams or innings_in.bowling_team_id not in match_teams:
+            raise RuleViolationError("Batting and bowling teams must both participate in this match")
+        if innings_in.batting_team_id == innings_in.bowling_team_id:
+            raise RuleViolationError("Batting and bowling teams cannot be the same")
+
+        return await self.innings_repo.create(
+            match.id,
+            InningsCreate(
+                innings_number=target_innings_number,
+                batting_team_id=innings_in.batting_team_id,
+                bowling_team_id=innings_in.bowling_team_id,
+                target=innings_in.target,
+            ),
+        )
+
     async def create_innings(
         self,
         match_id: int,
@@ -41,171 +224,52 @@ class InningsService:
         if innings_in is None:
             innings_in = InningsCreate()
 
-        # 1. Match must exist
         match = await self.match_repo.get_by_id(match_id, for_update=True)
-        if not match:
-            raise EntityNotFoundError(f"Match with ID {match_id} not found")
-
-        # 2. Match toss must be conducted first; cannot create innings on completed/abandoned match
-        if match.status in (MatchStatus.COMPLETED, MatchStatus.ABANDONED):
-            raise RuleViolationError(f"Cannot create innings: Match is already {match.status.value}")
-
-        if match.status == MatchStatus.SCHEDULED or match.toss_winner is None or match.toss_decision is None:
-            raise RuleViolationError("Cannot start an innings before the toss is conducted")
+        self._validate_innings_prerequisites(match, match_id)
+        assert match is not None
 
         match_teams = {match.team_a, match.team_b}
-
-        # 3. Determine target innings number (auto-derive if not provided)
         existing_inn1 = await self.innings_repo.get_by_match_and_number(match_id, 1, for_update=True)
-        if innings_in.innings_number is not None:
-            target_innings_number = innings_in.innings_number
-        else:
-            if existing_inn1 is None or existing_inn1.status != InningsStatus.COMPLETED:
-                target_innings_number = 1
-            else:
-                target_innings_number = 2
+        target_innings_number = self._resolve_target_innings_number(match, innings_in, existing_inn1)
 
-        # Validate maximum innings for the match format
-        format_rules = get_format_rules(match.format)
-        if target_innings_number > format_rules.total_innings:
-            fmt_str = match.format.value if hasattr(match.format, "value") else str(match.format)
-            raise RuleViolationError(
-                f"Cannot create Innings {target_innings_number}: Match format '{fmt_str}' only supports {format_rules.total_innings} innings"
-            )
-
-        # 4. Handle Innings 1
         if target_innings_number == 1:
-            other_team = match.team_b if match.toss_winner == match.team_a else match.team_a
-            if match.toss_decision == TossDecision.BAT:
-                expected_batting = match.toss_winner
-                expected_bowling = other_team
-            else:
-                expected_batting = other_team
-                expected_bowling = match.toss_winner
-
-            # Validate input teams if explicitly supplied
-            if innings_in.batting_team_id is not None:
-                if innings_in.batting_team_id not in match_teams:
-                    raise RuleViolationError("Batting team must participate in this match")
-                if innings_in.batting_team_id != expected_batting:
-                    raise RuleViolationError(
-                        f"Toss outcome dictates that Team {expected_batting} bats and Team {expected_bowling} bowls first"
-                    )
-            if innings_in.bowling_team_id is not None:
-                if innings_in.bowling_team_id not in match_teams:
-                    raise RuleViolationError("Bowling team must participate in this match")
-                if innings_in.bowling_team_id != expected_bowling:
-                    raise RuleViolationError(
-                        f"Toss outcome dictates that Team {expected_batting} bats and Team {expected_bowling} bowls first"
-                    )
-
-            # Idempotency check: if Innings 1 already exists, return it
-            if existing_inn1:
-                return existing_inn1
-
-            created_innings = await self.innings_repo.create(
-                match_id,
-                InningsCreate(
-                    innings_number=1,
-                    batting_team_id=expected_batting,
-                    bowling_team_id=expected_bowling,
-                    target=None,
-                ),
-            )
-
-            if match.status == MatchStatus.TOSS_DONE:
-                match.status = MatchStatus.LIVE
-                await self.match_repo.save(match)
-
-            return created_innings
-
-        # 5. Handle Innings 2
+            return await self._create_or_get_innings_1(match, match_teams, innings_in, existing_inn1)
         elif target_innings_number == 2:
-            if not existing_inn1:
-                raise RuleViolationError("Cannot create Innings 2 before Innings 1 is created")
-            if existing_inn1.status != InningsStatus.COMPLETED:
-                raise RuleViolationError("Cannot create Innings 2 before Innings 1 is completed")
-
-            expected_batting = existing_inn1.bowling_team_id
-            expected_bowling = existing_inn1.batting_team_id
-
-            # Validate input teams if explicitly supplied
-            if innings_in.batting_team_id is not None:
-                if innings_in.batting_team_id not in match_teams:
-                    raise RuleViolationError("Batting team must participate in this match")
-                if innings_in.batting_team_id != expected_batting:
-                    raise RuleViolationError(
-                        f"Innings 2 batting team must be Team {expected_batting} "
-                        f"and bowling team must be Team {expected_bowling}"
-                    )
-            if innings_in.bowling_team_id is not None:
-                if innings_in.bowling_team_id not in match_teams:
-                    raise RuleViolationError("Bowling team must participate in this match")
-                if innings_in.bowling_team_id != expected_bowling:
-                    raise RuleViolationError(
-                        f"Innings 2 batting team must be Team {expected_batting} "
-                        f"and bowling team must be Team {expected_bowling}"
-                    )
-
-            # Target auto-calculation
-            if self.delivery_repo:
-                inn1_deliveries = await self.delivery_repo.list_by_innings(existing_inn1.id)
-                inn1_runs = sum(d.runs + d.extras for d in inn1_deliveries)
-                derived_target = inn1_runs + 1
-            else:
-                derived_target = innings_in.target
-
-            target_runs = innings_in.target if innings_in.target is not None else derived_target
-            if target_runs is None:
-                raise RuleViolationError("Target runs must be set for Innings 2")
-
-            # Idempotency check: if Innings 2 already exists, return it
-            existing_inn2 = await self.innings_repo.get_by_match_and_number(match_id, 2)
-            if existing_inn2:
-                return existing_inn2
-
-            created_innings = await self.innings_repo.create(
-                match_id,
-                InningsCreate(
-                    innings_number=2,
-                    batting_team_id=expected_batting,
-                    bowling_team_id=expected_bowling,
-                    target=target_runs,
-                ),
-            )
-
-            if match.status == MatchStatus.INNINGS_BREAK:
-                match.status = MatchStatus.LIVE
-                await self.match_repo.save(match)
-
-            return created_innings
-
+            return await self._create_or_get_innings_2(match, match_teams, innings_in, existing_inn1)
         else:
-            # Multi-innings formats (e.g. Test match innings 3 or 4)
-            prev_inn = await self.innings_repo.get_by_match_and_number(match_id, target_innings_number - 1)
-            if not prev_inn or prev_inn.status != InningsStatus.COMPLETED:
-                raise RuleViolationError(f"Cannot create Innings {target_innings_number} before Innings {target_innings_number - 1} is completed")
+            return await self._create_or_get_multi_innings(match, match_teams, target_innings_number, innings_in)
 
-            existing_inn = await self.innings_repo.get_by_match_and_number(match_id, target_innings_number)
-            if existing_inn:
-                return existing_inn
+    async def _validate_start_squad_eligibility(
+        self,
+        match_id: int,
+        innings: Innings,
+        start_req: StartInningsRequest,
+    ) -> None:
+        """Validates that opening batters and bowler belong to their respective Playing XI."""
+        if not self.squad_repo:
+            return
 
-            if innings_in.batting_team_id is None or innings_in.bowling_team_id is None:
-                raise RuleViolationError("Batting and bowling teams must be provided for Innings > 2")
-            if innings_in.batting_team_id not in match_teams or innings_in.bowling_team_id not in match_teams:
-                raise RuleViolationError("Batting and bowling teams must both participate in this match")
-            if innings_in.batting_team_id == innings_in.bowling_team_id:
-                raise RuleViolationError("Batting and bowling teams cannot be the same")
+        batting_squad = await self.squad_repo.get_by_match_and_team(match_id, innings.batting_team_id)
+        if batting_squad and batting_squad.players:
+            playing_xi_batters = {p.player_id for p in batting_squad.players if p.is_playing_xi}
+            if playing_xi_batters:
+                if start_req.striker_id not in playing_xi_batters:
+                    raise RuleViolationError(
+                        f"Striker {start_req.striker_id} is not in the batting team's Playing XI"
+                    )
+                if start_req.non_striker_id not in playing_xi_batters:
+                    raise RuleViolationError(
+                        f"Non-striker {start_req.non_striker_id} is not in the batting team's Playing XI"
+                    )
 
-            return await self.innings_repo.create(
-                match_id,
-                InningsCreate(
-                    innings_number=target_innings_number,
-                    batting_team_id=innings_in.batting_team_id,
-                    bowling_team_id=innings_in.bowling_team_id,
-                    target=innings_in.target,
-                ),
-            )
+        bowling_squad = await self.squad_repo.get_by_match_and_team(match_id, innings.bowling_team_id)
+        if bowling_squad and bowling_squad.players:
+            playing_xi_bowlers = {p.player_id for p in bowling_squad.players if p.is_playing_xi}
+            if playing_xi_bowlers:
+                if start_req.bowler_id not in playing_xi_bowlers:
+                    raise RuleViolationError(
+                        f"Bowler {start_req.bowler_id} is not in the bowling team's Playing XI"
+                    )
 
     async def start_innings(
         self,
@@ -236,29 +300,7 @@ class InningsService:
         if start_req.bowler_id in (start_req.striker_id, start_req.non_striker_id):
             raise RuleViolationError("Bowler cannot be currently batting")
 
-        # Validate players against squad Playing XIs if squads exist
-        if self.squad_repo:
-            batting_squad = await self.squad_repo.get_by_match_and_team(match_id, innings.batting_team_id)
-            if batting_squad and batting_squad.players:
-                playing_xi_batters = {p.player_id for p in batting_squad.players if p.is_playing_xi}
-                if playing_xi_batters:
-                    if start_req.striker_id not in playing_xi_batters:
-                        raise RuleViolationError(
-                            f"Striker {start_req.striker_id} is not in the batting team's Playing XI"
-                        )
-                    if start_req.non_striker_id not in playing_xi_batters:
-                        raise RuleViolationError(
-                            f"Non-striker {start_req.non_striker_id} is not in the batting team's Playing XI"
-                        )
-
-            bowling_squad = await self.squad_repo.get_by_match_and_team(match_id, innings.bowling_team_id)
-            if bowling_squad and bowling_squad.players:
-                playing_xi_bowlers = {p.player_id for p in bowling_squad.players if p.is_playing_xi}
-                if playing_xi_bowlers:
-                    if start_req.bowler_id not in playing_xi_bowlers:
-                        raise RuleViolationError(
-                            f"Bowler {start_req.bowler_id} is not in the bowling team's Playing XI"
-                        )
+        await self._validate_start_squad_eligibility(match_id, innings, start_req)
 
         innings.current_striker_id = start_req.striker_id
         innings.current_non_striker_id = start_req.non_striker_id

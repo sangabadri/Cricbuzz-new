@@ -43,11 +43,11 @@ Measured on 2026-11-12 at commit `225e432`.
 |---|---|---|
 | `_build_innings_scorecard` | `services/scorecard.py` | [RESOLVED - 2026-11-14] Decomposed 272-line function into 5 focused static projection helpers |
 | `get_live_match_state` | `services/scorecard.py` | [RESOLVED - 2026-11-14] Decomposed 185-line method into focused static helpers (_build_current_over_balls, _project_live_batter, _project_live_bowler, _calculate_chase_status) |
-| `update_last_delivery` | `services/delivery.py` | 177 |
-| `create_innings` | `services/innings.py` | 167 |
+| `update_last_delivery` | `services/delivery.py` | [RESOLVED - 2026-11-14] Decomposed into focused helpers (_resolve_patch_fields, _build_simulated_deliveries, _sync_match_completion_status) |
+| `create_innings` | `services/innings.py` | [RESOLVED - 2026-11-14] Decomposed into focused lifecycle helpers (_validate_innings_prerequisites, _resolve_target_innings_number, _create_or_get_innings_1, _create_or_get_innings_2, _create_or_get_multi_innings) |
 | `record_ball` | `domain/innings_aggregate.py` | 150 |
 | `reconstruct` | `domain/innings_aggregate.py` | 144 |
-| `record_delivery` | `services/delivery.py` | 140 |
+| `record_delivery` | `services/delivery.py` | [RESOLVED - 2026-11-14] Decomposed into focused helpers (_resolve_delivery_participants, _sync_match_completion_status) |
 | `validate_delivery_state` | `domain/innings_aggregate.py` | 113 |
 | `seed_demo_match` | `routers/seed.py` | 101 |
 | `_build_scorer_state` | `services/delivery.py` | 91 |

@@ -49,7 +49,10 @@ This document defines the exact responsibilities, boundaries, and import constra
 - Enforces deterministic row locking (`for_update=True`, ADR-0003: Match locked first, then Innings).
 - Enforces entity lifecycle guards (e.g. `InningsService` rejecting innings creation on completed/abandoned matches or exceeding format limits).
 - Enforces access boundaries (e.g. `MatchAccessService` safeguarding sole match ownership against demotion or revocation).
-- Employs focused single-responsibility projection helpers (e.g. `ScorecardService` decomposing scorecard assembly into `_build_batting_scorecards`, `_build_bowling_scorecards`, `_build_fall_of_wickets`, and `_build_partnerships`, and live ticker projection into `_build_current_over_balls`, `_project_live_batter`, `_project_live_bowler`, and `_calculate_chase_status` with zero N+1 database queries).
+- Employs focused single-responsibility projection and orchestration helpers:
+  - `ScorecardService` decomposes scorecard assembly into `_build_batting_scorecards`, `_build_bowling_scorecards`, `_build_fall_of_wickets`, and `_build_partnerships`, and live ticker projection into `_build_current_over_balls`, `_project_live_batter`, `_project_live_bowler`, and `_calculate_chase_status` with zero N+1 database queries.
+  - `DeliveryService` decomposes ball recording and retroactive PATCH updates into `_resolve_delivery_participants`, `_resolve_patch_fields`, `_build_simulated_deliveries`, and unified match lifecycle synchronization `_sync_match_completion_status`.
+  - `InningsService` decomposes innings creation and opening batsman setup into `_validate_innings_prerequisites`, `_resolve_target_innings_number`, `_create_or_get_innings_1`, `_create_or_get_innings_2`, `_create_or_get_multi_innings`, and `_validate_start_squad_eligibility`.
 - Raises pure domain exceptions on invariant violations.
 
 ### F. Routers Layer (`app/routers/`)

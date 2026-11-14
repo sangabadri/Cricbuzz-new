@@ -118,6 +118,183 @@ class DeliveryService:
 
         return bowling_squad.wicket_keeper_id if bowling_squad else None
 
+    async def _sync_match_completion_status(
+        self,
+        match: Match | None,
+        innings: Innings,
+        aggregate: InningsAggregate,
+        is_reversal: bool = False,
+    ) -> None:
+        """
+        Synchronizes match lifecycle status and margins when innings transitions between active and completed.
+        Handles Innings 1 break / target reconciliation and Innings 2 match completion / winner derivation.
+        """
+        if aggregate.is_completed:
+            innings.status = InningsStatus.COMPLETED
+
+            if innings.innings_number == 1:
+                if match and self.match_repo:
+                    match.status = MatchStatus.INNINGS_BREAK
+                    await self.match_repo.save(match)
+
+                await self._reconcile_innings2_target(innings.match_id, innings, aggregate)
+            elif innings.innings_number == 2:
+                if match and self.match_repo:
+                    match.status = MatchStatus.COMPLETED
+                    match.win_margin_runs = aggregate.win_margin_runs
+                    match.win_margin_wickets = aggregate.win_margin_wickets
+                    if innings.target is not None:
+                        if aggregate.total_runs >= innings.target:
+                            match.winner = innings.batting_team_id
+                        elif aggregate.total_runs < innings.target - 1:
+                            match.winner = innings.bowling_team_id
+                        else:
+                            match.winner = None  # Tied match
+                    await self.match_repo.save(match)
+        else:
+            innings.status = InningsStatus.IN_PROGRESS
+            if match and self.match_repo:
+                if match.status in (MatchStatus.COMPLETED, MatchStatus.INNINGS_BREAK):
+                    match.status = MatchStatus.LIVE
+                    match.winner = None
+                    match.win_margin_runs = None
+                    match.win_margin_wickets = None
+                    await self.match_repo.save(match)
+
+            if is_reversal and innings.innings_number == 1:
+                await self._reconcile_innings2_target(innings.match_id, innings, aggregate)
+
+    def _resolve_delivery_participants(
+        self,
+        aggregate: InningsAggregate,
+        delivery_in: DeliveryCreate,
+    ) -> tuple[int, int, int, WicketType | None, int | None]:
+        """Resolves striker, non-striker, bowler, and dismissal participants with crease domain validation."""
+        effective_bowler_id = getattr(delivery_in, "bowler_id", None) or aggregate.current_bowler_id
+        if effective_bowler_id is None:
+            raise OverProgressionError("No bowler assigned for this over. Set bowler first.")
+
+        effective_striker_id = getattr(delivery_in, "striker_id", None) or aggregate.crease.striker_id
+        effective_non_striker_id = getattr(delivery_in, "non_striker_id", None) or aggregate.crease.non_striker_id
+
+        wicket_type = delivery_in.wicket_type
+        player_out_id = delivery_in.player_out_id
+
+        if wicket_type is not None:
+            if wicket_type == WicketType.RUN_OUT:
+                if player_out_id is None:
+                    raise RuleViolationError("player_out_id is required for run out dismissals")
+            else:
+                if player_out_id is None:
+                    player_out_id = effective_striker_id
+                elif player_out_id != effective_striker_id:
+                    raise CreaseViolationError(
+                        f"Only the striker ({effective_striker_id}) can be dismissed for {wicket_type.value}"
+                    )
+        else:
+            if player_out_id is not None:
+                raise RuleViolationError("player_out_id must be None when no wicket occurs")
+
+        return effective_striker_id, effective_non_striker_id, effective_bowler_id, wicket_type, player_out_id
+
+    def _resolve_patch_fields(
+        self,
+        last_ball: Delivery,
+        delivery_in: ManualDeliveryUpdate,
+    ) -> tuple[int, ExtraType | None, int, WicketType | None, int | None, int | None, str | None]:
+        """
+        Validates editable fields, enforces non-null constraints, and derives candidate delivery values
+        while preserving dependent group consistency for dismissals and extras.
+        """
+        supplied_fields = delivery_in.model_fields_set
+
+        for field in supplied_fields:
+            if field not in EDITABLE_DELIVERY_FIELDS:
+                raise RuleViolationError(f"Field '{field}' cannot be modified")
+
+        for field in NON_NULLABLE_DELIVERY_FIELDS:
+            if field in supplied_fields and getattr(delivery_in, field) is None:
+                raise RuleViolationError(f"Field '{field}' is non-nullable and cannot be set to null")
+
+        cand_runs = delivery_in.runs if "runs" in supplied_fields else last_ball.runs
+        cand_extra_type = delivery_in.extra_type if "extra_type" in supplied_fields else last_ball.extra_type
+        cand_extras = delivery_in.extras if "extras" in supplied_fields else last_ball.extras
+        cand_wicket_type = delivery_in.wicket_type if "wicket_type" in supplied_fields else last_ball.wicket_type
+        cand_player_out_id = delivery_in.player_out_id if "player_out_id" in supplied_fields else last_ball.player_out_id
+        cand_fielder_id = delivery_in.fielder_id if "fielder_id" in supplied_fields else last_ball.fielder_id
+        cand_commentary = delivery_in.commentary if "commentary" in supplied_fields else last_ball.commentary
+
+        if "wicket_type" in supplied_fields:
+            if cand_wicket_type is None:
+                if "player_out_id" not in supplied_fields:
+                    cand_player_out_id = None
+                if "fielder_id" not in supplied_fields:
+                    cand_fielder_id = None
+            else:
+                if "player_out_id" not in supplied_fields:
+                    if cand_wicket_type != WicketType.RUN_OUT:
+                        cand_player_out_id = last_ball.batsman_id
+                if cand_wicket_type in (WicketType.BOWLED, WicketType.LBW, WicketType.HIT_WICKET):
+                    if "fielder_id" not in supplied_fields:
+                        cand_fielder_id = None
+
+        if "extra_type" in supplied_fields:
+            if cand_extra_type is None:
+                if "extras" not in supplied_fields:
+                    cand_extras = 0
+            else:
+                if "extras" not in supplied_fields and cand_extras == 0:
+                    if cand_extra_type in (ExtraType.WIDE, ExtraType.NOBALL):
+                        cand_extras = 1
+
+        return (
+            cand_runs,
+            cand_extra_type,
+            cand_extras,
+            cand_wicket_type,
+            cand_player_out_id,
+            cand_fielder_id,
+            cand_commentary,
+        )
+
+    def _build_simulated_deliveries(
+        self,
+        deliveries: list[Any],
+        target_delivery_id: int,
+        cand_runs: int,
+        cand_extra_type: ExtraType | None,
+        cand_extras: int,
+        cand_wicket_type: WicketType | None,
+        cand_player_out_id: int | None,
+        cand_fielder_id: int | None,
+        cand_commentary: str | None,
+    ) -> list[Any]:
+        """Constructs an in-memory delivery payload list substituting candidate values for the target delivery."""
+        simulated: list[Any] = []
+        for d in deliveries:
+            if d.id == target_delivery_id:
+                simulated.append(
+                    DeliveryPayload({
+                        "id": d.id,
+                        "innings_id": d.innings_id,
+                        "over": d.over,
+                        "ball": d.ball,
+                        "bowler_id": d.bowler_id,
+                        "batsman_id": d.batsman_id,
+                        "non_striker_id": d.non_striker_id,
+                        "runs": cand_runs,
+                        "extra_type": cand_extra_type,
+                        "extras": cand_extras,
+                        "wicket_type": cand_wicket_type,
+                        "player_out_id": cand_player_out_id,
+                        "fielder_id": cand_fielder_id,
+                        "commentary": cand_commentary,
+                    })
+                )
+            else:
+                simulated.append(d)
+        return simulated
+
     async def _reconcile_innings2_target(
         self, match_id: int, innings1: Innings, inn1_aggregate: InningsAggregate
     ) -> None:
@@ -195,30 +372,13 @@ class DeliveryService:
         )
 
         # 2. Process ball on aggregate
-        effective_bowler_id = getattr(delivery_in, "bowler_id", None) or aggregate.current_bowler_id
-        if effective_bowler_id is None:
-            raise OverProgressionError("No bowler assigned for this over. Set bowler first.")
-
-        effective_striker_id = getattr(delivery_in, "striker_id", None) or aggregate.crease.striker_id
-        effective_non_striker_id = getattr(delivery_in, "non_striker_id", None) or aggregate.crease.non_striker_id
-
-        wicket_type = delivery_in.wicket_type
-        player_out_id = delivery_in.player_out_id
-
-        if wicket_type is not None:
-            if wicket_type == WicketType.RUN_OUT:
-                if player_out_id is None:
-                    raise RuleViolationError("player_out_id is required for run out dismissals")
-            else:
-                if player_out_id is None:
-                    player_out_id = effective_striker_id
-                elif player_out_id != effective_striker_id:
-                    raise CreaseViolationError(
-                        f"Only the striker ({effective_striker_id}) can be dismissed for {wicket_type.value}"
-                    )
-        else:
-            if player_out_id is not None:
-                raise RuleViolationError("player_out_id must be None when no wicket occurs")
+        (
+            effective_striker_id,
+            effective_non_striker_id,
+            effective_bowler_id,
+            wicket_type,
+            player_out_id,
+        ) = self._resolve_delivery_participants(aggregate, delivery_in)
 
         # Validate delivery state against fundamental cricket laws before keeper/squad checks
         InningsAggregate.validate_delivery_state(
@@ -266,30 +426,8 @@ class DeliveryService:
         innings.current_non_striker_id = aggregate.crease.non_striker_id
         innings.current_bowler_id = aggregate.current_bowler_id
 
-        # 6. Check if innings completed
-        if aggregate.is_completed:
-            innings.status = InningsStatus.COMPLETED
-
-            if innings.innings_number == 1:
-                if match and self.match_repo:
-                    match.status = MatchStatus.INNINGS_BREAK
-                    await self.match_repo.save(match)
-
-                await self._reconcile_innings2_target(match_id, innings, aggregate)
-            elif innings.innings_number == 2:
-                if match and self.match_repo:
-                    match.status = MatchStatus.COMPLETED
-                    match.win_margin_runs = aggregate.win_margin_runs
-                    match.win_margin_wickets = aggregate.win_margin_wickets
-                    if innings.target is not None:
-                        if aggregate.total_runs >= innings.target:
-                            match.winner = innings.batting_team_id
-                        elif aggregate.total_runs < innings.target - 1:
-                            match.winner = innings.bowling_team_id
-                        else:
-                            match.winner = None  # Tied match
-                    await self.match_repo.save(match)
-
+        # 6. Check if innings completed and synchronize match status
+        await self._sync_match_completion_status(match, innings, aggregate)
         await self.innings_repo.save(innings)
 
         if return_state:
@@ -492,56 +630,15 @@ class DeliveryService:
 
         await self._assert_delivery_mutable(match_id, innings, last_ball)
 
-        supplied_fields = delivery_in.model_fields_set
-
-        # Check for un-editable or illegal fields in supplied_fields
-        for field in supplied_fields:
-            if field not in EDITABLE_DELIVERY_FIELDS:
-                raise RuleViolationError(f"Field '{field}' cannot be modified")
-
-        # Explicit null checks for non-nullable fields
-        for field in NON_NULLABLE_DELIVERY_FIELDS:
-            if field in supplied_fields and getattr(delivery_in, field) is None:
-                raise RuleViolationError(f"Field '{field}' is non-nullable and cannot be set to null")
-
-        # Base candidate values start with current persisted delivery values (omitted fields retained)
-        cand_runs = delivery_in.runs if "runs" in supplied_fields else last_ball.runs
-        cand_extra_type = delivery_in.extra_type if "extra_type" in supplied_fields else last_ball.extra_type
-        cand_extras = delivery_in.extras if "extras" in supplied_fields else last_ball.extras
-        cand_wicket_type = delivery_in.wicket_type if "wicket_type" in supplied_fields else last_ball.wicket_type
-        cand_player_out_id = delivery_in.player_out_id if "player_out_id" in supplied_fields else last_ball.player_out_id
-        cand_fielder_id = delivery_in.fielder_id if "fielder_id" in supplied_fields else last_ball.fielder_id
-        cand_commentary = delivery_in.commentary if "commentary" in supplied_fields else last_ball.commentary
-
-        # Enforce dependent group consistency when only one field of a dependent group is supplied:
-        # Group 1: Dismissals (wicket_type, player_out_id, fielder_id)
-        if "wicket_type" in supplied_fields:
-            if cand_wicket_type is None:
-                # Accidental wicket cleared: clear stale dismissal info if not explicitly provided
-                if "player_out_id" not in supplied_fields:
-                    cand_player_out_id = None
-                if "fielder_id" not in supplied_fields:
-                    cand_fielder_id = None
-            else:
-                # Wicket recorded or changed
-                if "player_out_id" not in supplied_fields:
-                    if cand_wicket_type != WicketType.RUN_OUT:
-                        cand_player_out_id = last_ball.batsman_id
-                if cand_wicket_type in (WicketType.BOWLED, WicketType.LBW, WicketType.HIT_WICKET):
-                    if "fielder_id" not in supplied_fields:
-                        cand_fielder_id = None
-
-        # Group 2: Extras (extra_type, extras, runs)
-        if "extra_type" in supplied_fields:
-            if cand_extra_type is None:
-                # Accidental extra cleared: clear stale extras to 0 if not explicitly provided
-                if "extras" not in supplied_fields:
-                    cand_extras = 0
-            else:
-                # Extra type added/changed: if extras was omitted and currently 0, default to 1 for wide/noball
-                if "extras" not in supplied_fields and cand_extras == 0:
-                    if cand_extra_type in (ExtraType.WIDE, ExtraType.NOBALL):
-                        cand_extras = 1
+        (
+            cand_runs,
+            cand_extra_type,
+            cand_extras,
+            cand_wicket_type,
+            cand_player_out_id,
+            cand_fielder_id,
+            cand_commentary,
+        ) = self._resolve_patch_fields(last_ball, delivery_in)
 
         # Validate complete resulting delivery state against domain rules before mutating any persistent state
         InningsAggregate.validate_delivery_state(
@@ -556,7 +653,7 @@ class DeliveryService:
             bowler_id=last_ball.bowler_id,
         )
 
-        fielding_keeper_id = await self._resolve_and_validate_wicket_keeper(
+        await self._resolve_and_validate_wicket_keeper(
             match_id, innings.bowling_team_id, cand_wicket_type, cand_fielder_id
         )
 
@@ -564,30 +661,17 @@ class DeliveryService:
         all_deliveries = await self.delivery_repo.list_by_innings(innings.id)
         match_format = match.format if match else "t20"
 
-        # Build candidate delivery list where last_ball reflects the candidate changes
-        simulated_deliveries = []
-        for d in all_deliveries:
-            if d.id == last_ball.id:
-                simulated_deliveries.append(
-                    DeliveryPayload({
-                        "id": d.id,
-                        "innings_id": d.innings_id,
-                        "over": d.over,
-                        "ball": d.ball,
-                        "bowler_id": d.bowler_id,
-                        "batsman_id": d.batsman_id,
-                        "non_striker_id": d.non_striker_id,
-                        "runs": cand_runs,
-                        "extra_type": cand_extra_type,
-                        "extras": cand_extras,
-                        "wicket_type": cand_wicket_type,
-                        "player_out_id": cand_player_out_id,
-                        "fielder_id": cand_fielder_id,
-                        "commentary": cand_commentary,
-                    })
-                )
-            else:
-                simulated_deliveries.append(d)
+        simulated_deliveries = self._build_simulated_deliveries(
+            all_deliveries,
+            last_ball.id,
+            cand_runs,
+            cand_extra_type,
+            cand_extras,
+            cand_wicket_type,
+            cand_player_out_id,
+            cand_fielder_id,
+            cand_commentary,
+        )
 
         aggregate = InningsAggregate.reconstruct(
             innings_id=innings.id,
@@ -614,36 +698,9 @@ class DeliveryService:
         innings.current_striker_id = aggregate.crease.striker_id
         innings.current_non_striker_id = aggregate.crease.non_striker_id
         innings.current_bowler_id = aggregate.current_bowler_id
-        innings.status = InningsStatus.COMPLETED if aggregate.is_completed else InningsStatus.IN_PROGRESS
+
+        await self._sync_match_completion_status(match, innings, aggregate, is_reversal=True)
         await self.innings_repo.save(innings)
-
-        if match and self.match_repo:
-            if not aggregate.is_completed and match.status in (MatchStatus.COMPLETED, MatchStatus.INNINGS_BREAK):
-                match.status = MatchStatus.LIVE
-                match.winner = None
-                match.win_margin_runs = None
-                match.win_margin_wickets = None
-                await self.match_repo.save(match)
-            elif aggregate.is_completed:
-                if innings.innings_number == 1:
-                    if match.status == MatchStatus.LIVE:
-                        match.status = MatchStatus.INNINGS_BREAK
-                        await self.match_repo.save(match)
-                elif innings.innings_number == 2:
-                    match.status = MatchStatus.COMPLETED
-                    match.win_margin_runs = aggregate.win_margin_runs
-                    match.win_margin_wickets = aggregate.win_margin_wickets
-                    if innings.target is not None:
-                        if aggregate.total_runs >= innings.target:
-                            match.winner = innings.batting_team_id
-                        elif aggregate.total_runs < innings.target - 1:
-                            match.winner = innings.bowling_team_id
-                        else:
-                            match.winner = None
-                    await self.match_repo.save(match)
-
-        if innings.innings_number == 1:
-            await self._reconcile_innings2_target(match_id, innings, aggregate)
 
         return saved_ball
 
@@ -678,18 +735,9 @@ class DeliveryService:
         innings.current_striker_id = aggregate.crease.striker_id
         innings.current_non_striker_id = aggregate.crease.non_striker_id
         innings.current_bowler_id = aggregate.current_bowler_id
-        innings.status = InningsStatus.IN_PROGRESS
+
+        await self._sync_match_completion_status(match, innings, aggregate, is_reversal=True)
         await self.innings_repo.save(innings)
-
-        if match and match.status in (MatchStatus.COMPLETED, MatchStatus.INNINGS_BREAK):
-            match.status = MatchStatus.LIVE
-            match.winner = None
-            match.win_margin_runs = None
-            match.win_margin_wickets = None
-            await self.match_repo.save(match)
-
-        if innings.innings_number == 1:
-            await self._reconcile_innings2_target(match_id, innings, aggregate)
 
         return last_ball
 
