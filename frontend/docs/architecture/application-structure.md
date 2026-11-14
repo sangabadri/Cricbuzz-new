@@ -52,6 +52,13 @@ frontend/src/
 | **Pure Helper Function** | `lib/` or feature folder | Pure input -> output. No React or DOM dependencies. |
 | **Backend Response Type** | `types/` | Matches Pydantic schemas in `backend/app/schemas/` exactly. |
 
+### Scorer Console Decomposition (`src/features/scoring/`)
+- `ScorerConsolePage`: Orchestrates the console workspace, loads state, and hosts modal dialogs (< 250 lines).
+- `ScorerHeader`: Displays breadcrumbs, innings selector, access modal trigger, and Match Center shortcut.
+- `MatchCompletedBanner`: Displays winner details and Man of the Match nomination form.
+- `InningsTransitionPrompts`: Shows innings break targets or opening batter setup prompts.
+- `useScorerKeyboardShortcuts`: Manages non-intrusive physical key bindings for ball recording and wicket triggers.
+
 ---
 
 ## 3. Provider Hierarchy (`src/app/providers/AppProvider.tsx`)
