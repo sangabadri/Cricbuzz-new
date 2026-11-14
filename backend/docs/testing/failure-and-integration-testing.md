@@ -39,8 +39,8 @@ Security mechanisms must be tested against malicious and unexpected access attem
 |---|---|
 | **Replayed Refresh Token** | When a previously revoked refresh token is sent to `/auth/refresh`, the system must detect the reuse attack, reject with `401 Unauthorized`, and revoke **all** active refresh sessions for that user. |
 | **Expired Token Access** | Send expired JWT in `Authorization: Bearer <token>`. Verify response is `401 Unauthorized` with `WWW-Authenticate: Bearer` header. |
-| **Privilege Escalation** | A user with role `viewer` attempts to call `POST /deliveries/...`. Verify response is `403 Forbidden` (`AccessDeniedError`). |
-| **Tampered Match Parameter** | Missing or non-integer match ID in path parameter. Verify `require_match_access` fails closed with `400 Bad Request`. |
+| **Non-Owner Mutation** | A non-owner user attempts to mutate match state (e.g. POST toss, squads, deliveries). Verify response is `403 Forbidden` (`You do not have permission to modify this match`). |
+| **Tampered Match Parameter** | Missing or non-integer match ID in path parameter. Verify `require_match_owner` fails closed with `400 Bad Request`. |
 
 ---
 

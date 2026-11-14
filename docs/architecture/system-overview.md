@@ -57,7 +57,7 @@ Cricbuzz Tracker is organized into two standalone workspaces—a Python **FastAP
 |   |                      PostgreSQL 16 Database                            |   |
 |   |                                                                        |   |
 |   |   Tables: matches, innings, deliveries, squads, squad_players,         |   |
-|   |           players, teams, users, match_access, refresh_tokens          |   |
+|   |           players, teams, users, refresh_tokens                        |   |
 |   +------------------------------------------------------------------------+   |
 +--------------------------------------------------------------------------------+
 ```
@@ -74,7 +74,7 @@ Cricbuzz Tracker is organized into two standalone workspaces—a Python **FastAP
   2. Maintain relational consistency, transaction atomicity, and deterministic row locking (`app/database.py`, ADR-0002, ADR-0003).
   3. Validate external JSON payloads using Pydantic schemas (`app/schemas/`).
   4. Serve REST API endpoints with standardized JSON responses and domain exception mapping (`app/routers/`, ADR-0004).
-  5. Authenticate users, verify match ownership/scoring permissions via `match_access`, and manage cryptographically rotated refresh tokens (`app/services/auth.py`, `app/services/match_access.py`, ADR-0007).
+  5. Authenticate users, verify match ownership via direct `matches.owner_id` (ADR-0008), and manage cryptographically rotated refresh tokens (`app/services/auth.py`, `app/api/deps.py`).
 
 ### B. Frontend Workspace (`frontend/`)
 - **Technology**: React 19, TypeScript, Vite, Tailwind CSS v4, TanStack Query v5, Axios, React Router.
@@ -127,4 +127,5 @@ Cricbuzz Tracker is organized into two standalone workspaces—a Python **FastAP
 | [ADR-0004](../../docs/decisions/0004-domain-errors.md) | Centralized Error Mapping | Domain exceptions mapped to HTTP status codes in `main.py`. |
 | [ADR-0005](../../docs/decisions/0005-no-auth.md) | Auth Architecture Debt Guard | Public spectator access stays unauthenticated; no ad-hoc auth logic. |
 | [ADR-0006](../../docs/decisions/0006-frontend-structure.md) | Frontend Structure | Feature folders; server data in TanStack Query; no rules in UI. |
-| [ADR-0007](../../docs/decisions/0007-match-access-single-source-of-truth.md) | Canonical Match Ownership | `match_access` table is sole source of truth; removed `matches.created_by`. |
+| [ADR-0007](../../docs/decisions/0007-match-access-single-source-of-truth.md) | Match Ownership (Superseded) | Superseded by ADR-0008. |
+| [ADR-0008](../../docs/decisions/0008-single-owner-match-model.md) | Single-Owner Match Model | A match belongs to exactly one user via direct `matches.owner_id`. |

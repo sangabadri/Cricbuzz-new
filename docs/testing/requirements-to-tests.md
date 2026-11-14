@@ -45,8 +45,8 @@ Every feature or significant change must be verified across the following 7 dime
 | **FR-6.2** (Scorecards) | Functional | Scorecard accurately aggregates 4s, 6s, strike rate, overs, maidens, economy. | `backend/tests/unit/test_scorecard_service.py` |
 | **FR-7.3** (Refresh cookie)| Security (NFR) | Refresh token transmitted only via `httpOnly`, `SameSite=Lax` cookie. | `backend/tests/e2e/test_auth_and_access_e2e.py` |
 | **FR-7.5** (Reuse attack) | Security (Negative) | Replaying revoked refresh token revokes all user sessions. | `backend/tests/unit/test_refresh_token_repository.py` |
-| **FR-8.1** (Match ownership)| Security / Contract | Match creator assigned `owner` role in `match_access`. | `backend/tests/unit/test_match_access_authorization.py` |
-| **FR-8.3** (Scoring guard) | Negative / Security | Non-scorer user rejected with HTTP 403 when recording ball. | `backend/tests/unit/test_match_access_authorization.py` |
+| **FR-8.1** (Match ownership)| Security / Contract | Match creator assigned direct `owner_id` on match. | `backend/tests/unit/test_match_owner_authorization.py` |
+| **FR-8.3** (Scoring guard) | Negative / Security | Non-owner user rejected with HTTP 403 when modifying match. | `backend/tests/unit/test_match_owner_authorization.py` |
 | **FR-8.5** (Public access) | Non-Functional | Anonymous spectator can fetch match list, live summary, and scorecards. | `backend/tests/e2e/test_auth_and_access_e2e.py` |
 | **NFR-1.2** (Lock order) | Concurrency (Failure) | Concurrent scoring calls acquire match then innings locks without deadlock. | `backend/tests/unit/test_delivery_concurrency_locks.py` |
 | **NFR-2.1** (Domain isolation)| Architecture | `app/domain` contains zero framework/ORM imports. | `backend/tests/unit/test_architecture.py` |

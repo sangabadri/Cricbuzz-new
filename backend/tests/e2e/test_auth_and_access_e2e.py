@@ -115,7 +115,7 @@ async def test_auth_registration_login_and_me_e2e(test_client: AsgiTestClient):
 
 
 @sync
-async def test_match_access_authorization_guard_e2e(test_client: AsgiTestClient):
+async def test_single_owner_match_authorization_guard_e2e(test_client: AsgiTestClient):
     # Register Owner User
     reg_a = await test_client.post(
         "/api/v1/auth/register",

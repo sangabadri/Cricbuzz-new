@@ -14,8 +14,7 @@ backend/tests/
 ├── unit/
 │   ├── test_architecture.py                # Enforces domain framework isolation (ADR-0001)
 │   ├── test_auth_service.py                # Unit tests for authentication logic
-│   ├── test_match_access_authorization.py  # Unit tests for MatchAccess authorization logic
-│   ├── test_match_access_repository.py     # Fast repository tests
+│   ├── test_match_owner_authorization.py   # Unit tests for single-owner match authorization (ADR-0008)
 │   ├── test_refresh_token_repository.py    # Unit tests for token rotation & reuse detection
 │   ├── test_delivery_rules.py              # Delivery scoring unit tests
 │   ├── test_scorecard_service.py           # Unit tests for scorecard calculations

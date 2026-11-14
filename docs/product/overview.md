@@ -13,9 +13,9 @@ The system is built to balance two fundamental needs:
 
 | Persona | Primary Needs & Goals | Core Workflows | Authentication |
 |---|---|---|---|
-| **Public Spectator** | Follow live matches, browse past fixtures, inspect detailed batter/bowler scorecards, and read ball commentary. | View match list, filter by status (Live, Scheduled, Completed), inspect match center tabs. | **Unauthenticated** (Strictly public) |
-| **Match Scorer** | Fast ball recording, strike changes, extras, dismissals, bowler rotation, undo last ball, and innings transitions. | Open Scorer Console, manage active striker/non-striker/bowler, record deliveries, resolve wickets. | **Authenticated** (Role: `scorer` or `owner`) |
-| **Tournament Admin** | Schedule new matches, register teams and players, set up Playing XIs, manage toss, and assign scorers. | Setup Wizard, Dashboard management, Toss manager, Squad submission, Match Access assignment. | **Authenticated** (Role: `owner` or Superuser) |
+| **Public Spectator** | Follow live matches, browse past fixtures, inspect detailed batter/bowler scorecards, and read ball commentary. | View match list, filter by status (Live, Scheduled, Completed), inspect match center tabs. | **Unauthenticated** (Strictly public, ADR-0005) |
+| **Match Scorer / Creator** | Fast ball recording, strike changes, extras, dismissals, bowler rotation, undo last ball, and innings transitions. | Open Scorer Console, manage active striker/non-striker/bowler, record deliveries, resolve wickets. | **Authenticated** (Match Owner via `matches.owner_id`, ADR-0008) |
+| **Tournament Admin** | Schedule new matches, register teams and players, set up Playing XIs, manage toss. | Setup Wizard, Dashboard management, Toss manager, Squad submission. | **Authenticated** (Match Owner or Superuser) |
 
 ---
 
@@ -47,7 +47,7 @@ The system is built to balance two fundamental needs:
 
 ### D. Security & Access Control
 - Cookie-based session management (`httpOnly`, `SameSite=Lax` refresh tokens) with cryptographically secure token rotation.
-- Match-level Access Control List (ACL) stored canonically in `match_access` table (`owner`, `scorer`, `viewer`).
+- Single-Owner Match Model stored directly on `matches.owner_id` (ADR-0008). A match belongs strictly to one user with no multi-user role delegation.
 - Explicit fail-closed authorization guards protecting scoring endpoints.
 - Unconditional public access to all read-only spectator views.
 

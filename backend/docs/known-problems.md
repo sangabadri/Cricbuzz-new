@@ -26,7 +26,7 @@ The auth and match access implementation introduced architectural boundary viola
 - Resolved in Slice F: Implemented active session tracking via `RefreshToken` database model and `RefreshTokenRepository`. Enforced cryptographic token rotation on every `/auth/refresh` request, with automatic reuse attack detection that invalidates all active sessions for a user if a revoked token is replayed. Added `/auth/logout` endpoint that revokes the active database session and clears the browser cookie.
 
 ### G. [RESOLVED - 2026-11-13] Inconsistent Route Path Parameters (Consistency)
-- Resolved: Standardized route paths to `/matches/{match_id}/access` and route parameter names to `match_id: int`.
+- Resolved: Standardized route parameter names to `match_id: int` across all match endpoints (and retired legacy `/access` sub-resource per ADR-0008).
 
 ### H. [RESOLVED - 2026-11-13] Tight Coupling in `MatchService` (Extensibility / Coupling)
 - Resolved: Decoupled `MatchRepository` injection in `deps.py` via `get_match_repo()`; eliminated private attribute extraction `match_service.match_repo`. Harmonized all service providers in `app/api/deps.py` (`get_team_service`, `get_player_service`, `get_match_service`, `get_squad_service`, `get_innings_service`, `get_delivery_service`, `get_scorecard_service`) to accept dedicated repository providers (`get_*_repo`) via pure FastAPI `Depends(...)` dependency injection.
