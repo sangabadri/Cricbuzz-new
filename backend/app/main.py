@@ -1,9 +1,12 @@
+import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
-from app.database import engine
+from app.database import engine, get_db
 from app.domain.exceptions import (
     CricketDomainError,
     EntityNotFoundError,
@@ -24,6 +27,8 @@ from app.models.innings import Innings
 from app.models.delivery import Delivery
 from app.models.user import User
 from app.models.refresh_token import RefreshToken
+from app.models.idempotency import IdempotencyRecord
+from app.middleware.rate_limit import DistributedRateLimitMiddleware
 from app.routers.api import api_router
 
 
@@ -37,6 +42,10 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
+    from app.services.event_bus import match_event_bus
+    from app.services.redis_client import close_redis_client
+    await match_event_bus.stop_all_listeners()
+    await close_redis_client()
 
 
 app = FastAPI(
@@ -47,7 +56,8 @@ app = FastAPI(
 )
 
 
-# Enable CORS for local and web development
+# Register middlewares (evaluated in reverse order of addition: CORS must be outermost)
+app.add_middleware(DistributedRateLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -105,6 +115,35 @@ async def root():
     }
 
 
-@app.get("/health", tags=["General"])
+@app.get("/health", tags=["General"], summary="Legacy health check alias")
 async def health_check():
     return {"status": "ok"}
+
+
+@app.get("/health/live", tags=["General"], summary="Liveness probe for process and event loop responsiveness")
+async def liveness_check():
+    """
+    Shallow probe: returns 200 OK immediately if the web process is running
+    and the async event loop is alive.
+    """
+    return {"status": "alive"}
+
+
+@app.get(
+    "/health/ready",
+    tags=["General"],
+    summary="Readiness probe for database connection and dependency availability",
+)
+async def readiness_check(db: AsyncSession = Depends(get_db)):
+    """
+    Deep probe: verifies that the PostgreSQL connection pool is healthy
+    and accepting queries. Returns 503 if unreachable or timed out.
+    """
+    try:
+        await db.execute(text("SELECT 1"), execution_options={"timeout": 2.0})
+        return {"status": "ready", "database": "connected"}
+    except Exception as exc:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "not_ready", "database": "disconnected", "detail": str(exc)},
+        )
