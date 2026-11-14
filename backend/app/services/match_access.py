@@ -55,6 +55,15 @@ class MatchAccessService:
         if not target_user:
             raise EntityNotFoundError(f"User '{target_username}' not found")
 
+        # Do not allow demoting the sole owner of the match
+        if role != MatchUserRole.OWNER:
+            current_role = await self.match_access_repo.get_user_match_role(match_id, target_user.id)
+            if current_role == MatchUserRole.OWNER:
+                existing_grants = await self.match_access_repo.list_for_match(match_id)
+                owner_count = sum(1 for rec, _ in existing_grants if rec.role == MatchUserRole.OWNER)
+                if owner_count <= 1:
+                    raise RuleViolationError("Cannot demote the sole owner of the match")
+
         access = await self.match_access_repo.grant_access(
             match_id=match_id,
             user_id=target_user.id,

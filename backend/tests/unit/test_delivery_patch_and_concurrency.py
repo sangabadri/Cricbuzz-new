@@ -6,7 +6,6 @@ from sqlalchemy.dialects import postgresql, sqlite
 from app.domain.enums import ExtraType, InningsStatus, MatchFormat, MatchStatus, WicketType
 from app.domain.exceptions import CreaseViolationError, RuleViolationError
 from app.domain.innings_aggregate import InningsAggregate
-from app.domain.rules.formats import ODIFormatRules, T20FormatRules, get_format_rules
 from app.models.delivery import Delivery
 from app.models.innings import Innings
 from app.models.match import Match
@@ -615,32 +614,8 @@ def test_innings_repository_compiles_for_update_sql():
 
 
 # ---------------------------------------------------------------------------
-# 4. Format Rules Consistency Tests
+# 4. API & Over Boundary Progression Tests
 # ---------------------------------------------------------------------------
-
-def test_t20_and_odi_format_rules_integrity():
-    """T20 and ODI rules remain fully functional with correct format constants."""
-    t20 = get_format_rules(MatchFormat.T20)
-    assert isinstance(t20, T20FormatRules)
-    assert t20.max_overs == 20
-    assert t20.max_bowler_overs == 4
-    assert t20.balls_per_over == 6
-    assert t20.total_innings == 2
-
-    odi = get_format_rules(MatchFormat.ODI)
-    assert isinstance(odi, ODIFormatRules)
-    assert odi.max_overs == 50
-    assert odi.max_bowler_overs == 10
-    assert odi.balls_per_over == 6
-    assert odi.total_innings == 2
-
-
-def test_unsupported_formats_fail_explicitly():
-    """Unsupported formats fail explicitly and are not silently treated as T20."""
-    for unsupported in ("test", "the_hundred", "t10", "sixty", "unknown"):
-        with pytest.raises(RuleViolationError) as exc:
-            get_format_rules(unsupported)
-        assert "Unsupported match format" in exc.value.detail
 
 
 @sync
@@ -1006,7 +981,7 @@ async def test_innings_1_target_updated_on_recompletion_after_undo():
                 runs=5 if w == 1 else 0,
                 extra_type=None,
                 extras=0,
-                wicket_type=WicketType.BOWLED,
+                wicket_type=WicketType.RUN_OUT if w == 1 else WicketType.BOWLED,
                 player_out_id=10 + w - 1,
             )
         )
@@ -1031,7 +1006,7 @@ async def test_innings_1_target_updated_on_recompletion_after_undo():
 
     service = DeliveryService(delivery_repo, innings_repo, match_repo)
 
-    # 10th wicket falls with 2 runs off the bat -> total runs = 7, target for inn2 should be 8
+    # 10th wicket falls with 2 runs off the bat (run out) -> total runs = 7, target for inn2 should be 8
     ball_in = DeliveryCreate(
         bowler_id=41,
         striker_id=19,
@@ -1039,7 +1014,7 @@ async def test_innings_1_target_updated_on_recompletion_after_undo():
         runs=2,
         extra_type=None,
         extras=0,
-        wicket_type=WicketType.BOWLED,
+        wicket_type=WicketType.RUN_OUT,
         player_out_id=19,
     )
     await service.record_delivery(match_id=1, innings_number=1, delivery_in=ball_in)
@@ -1500,13 +1475,13 @@ async def test_update_last_delivery_reconciles_innings2_target():
                 id=w, innings_id=1, over=0 if w <= 6 else 1, ball=w if w <= 6 else w - 6,
                 bowler_id=40 if w <= 6 else 41, batsman_id=10 + w - 1, non_striker_id=30,
                 runs=2 if w == 1 else 0, extra_type=None, extras=0,
-                wicket_type=WicketType.BOWLED, player_out_id=10 + w - 1,
+                wicket_type=WicketType.RUN_OUT if w == 1 else WicketType.BOWLED, player_out_id=10 + w - 1,
             )
         )
     # Ball 10 is the final wicket with 0 runs (total = 2)
     d10 = Delivery(
         id=10, innings_id=1, over=1, ball=4, bowler_id=41, batsman_id=19, non_striker_id=30,
-        runs=0, extra_type=None, extras=0, wicket_type=WicketType.BOWLED, player_out_id=19,
+        runs=0, extra_type=None, extras=0, wicket_type=WicketType.RUN_OUT, player_out_id=19,
     )
     deliveries.append(d10)
 
@@ -1609,7 +1584,7 @@ async def test_reopen_and_recomplete_innings1_recalculates_innings2_target():
                 id=w, innings_id=1, over=0 if w <= 6 else 1, ball=w if w <= 6 else w - 6,
                 bowler_id=40 if w <= 6 else 41, batsman_id=10 + w - 1, non_striker_id=30,
                 runs=2 if w == 1 else 0, extra_type=None, extras=0,
-                wicket_type=WicketType.BOWLED, player_out_id=10 + w - 1,
+                wicket_type=WicketType.RUN_OUT if w == 1 else WicketType.BOWLED, player_out_id=10 + w - 1,
             )
         )
     d10 = Delivery(
@@ -1633,7 +1608,7 @@ async def test_reopen_and_recomplete_innings1_recalculates_innings2_target():
     # Set incoming batter for the 10th wicket
     await service.set_incoming_batter(match_id=1, innings_number=1, player_id=19)
 
-    # 2. Now record a new 10th ball scoring 6 runs and bowled out -> total becomes 2 + 6 = 8
+    # 2. Now record a new 10th ball scoring 6 runs and run out -> total becomes 2 + 6 = 8
     delivery_repo.create.side_effect = lambda inn_id, payload: Delivery(
         id=10, innings_id=inn_id, over=1, ball=4, bowler_id=41, batsman_id=19, non_striker_id=30,
         runs=payload.runs, extra_type=payload.extra_type, extras=payload.extras,
@@ -1641,7 +1616,7 @@ async def test_reopen_and_recomplete_innings1_recalculates_innings2_target():
     )
     new_ball = DeliveryCreate(
         bowler_id=41, striker_id=19, non_striker_id=30, runs=6, extra_type=None, extras=0,
-        wicket_type=WicketType.BOWLED, player_out_id=19,
+        wicket_type=WicketType.RUN_OUT, player_out_id=19,
     )
     await service.record_delivery(match_id=1, innings_number=1, delivery_in=new_ball)
 

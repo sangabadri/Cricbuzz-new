@@ -14,6 +14,7 @@ class DeliveryCreate(BaseModel):
     wicket_type: WicketType | None = Field(default=None, description="Dismissal type if wicket fell")
     player_out_id: int | None = Field(default=None, description="Player ID dismissed")
     fielder_id: int | None = Field(default=None, description="Player ID of fielder")
+    new_batter_id: int | None = Field(default=None, description="Optional player ID of incoming batter after dismissal")
     commentary: str | None = Field(default=None, description="Ball commentary text")
     # Optional overrides for initial setup / manual correction
     bowler_id: int | None = Field(default=None, description="Optional override for bowler")

@@ -243,8 +243,8 @@ export interface LiveScorerStateResponse {
   innings_status: InningsStatus;
   total_runs: number;
   total_wickets: number;
-  current_over: number;
-  balls_in_over: number;
+  current_over?: number;
+  balls_in_over?: number;
   overs_display: string;
   legal_balls: number;
   current_run_rate: number;
@@ -254,17 +254,18 @@ export interface LiveScorerStateResponse {
   required_run_rate?: number | null;
   striker_id?: number | null;
   striker_name?: string | null;
-  striker_runs: number;
-  striker_balls: number;
+  striker_runs?: number;
+  striker_balls?: number;
   non_striker_id?: number | null;
   non_striker_name?: string | null;
-  non_striker_runs: number;
-  non_striker_balls: number;
+  non_striker_runs?: number;
+  non_striker_balls?: number;
   current_bowler_id?: number | null;
   current_bowler_name?: string | null;
-  current_bowler_overs: string;
-  current_bowler_runs: number;
-  current_bowler_wickets: number;
+  current_bowler_overs?: string;
+  current_bowler_runs?: number;
+  current_bowler_wickets?: number;
+  awaiting_new_batter?: boolean;
   over_completed?: boolean;
   current_over_balls: string[];
   next_action:
@@ -289,7 +290,11 @@ export interface DeliveryCreate {
   wicket_type?: WicketType | null;
   player_out_id?: number | null;
   fielder_id?: number | null;
+  new_batter_id?: number | null;
   commentary?: string | null;
+  bowler_id?: number | null;
+  striker_id?: number | null;
+  non_striker_id?: number | null;
 }
 
 export interface DeliveryResponse {

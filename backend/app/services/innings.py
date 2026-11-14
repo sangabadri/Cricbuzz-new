@@ -1,5 +1,6 @@
 from app.domain.enums import InningsStatus, MatchStatus, TossDecision
 from app.domain.exceptions import EntityNotFoundError, RuleViolationError
+from app.domain.rules.formats import get_format_rules
 from app.models.innings import Innings
 from app.repositories.delivery import DeliveryRepository
 from app.repositories.innings import InningsRepository
@@ -45,7 +46,10 @@ class InningsService:
         if not match:
             raise EntityNotFoundError(f"Match with ID {match_id} not found")
 
-        # 2. Match toss must be conducted first
+        # 2. Match toss must be conducted first; cannot create innings on completed/abandoned match
+        if match.status in (MatchStatus.COMPLETED, MatchStatus.ABANDONED):
+            raise RuleViolationError(f"Cannot create innings: Match is already {match.status.value}")
+
         if match.status == MatchStatus.SCHEDULED or match.toss_winner is None or match.toss_decision is None:
             raise RuleViolationError("Cannot start an innings before the toss is conducted")
 
@@ -60,6 +64,14 @@ class InningsService:
                 target_innings_number = 1
             else:
                 target_innings_number = 2
+
+        # Validate maximum innings for the match format
+        format_rules = get_format_rules(match.format)
+        if target_innings_number > format_rules.total_innings:
+            fmt_str = match.format.value if hasattr(match.format, "value") else str(match.format)
+            raise RuleViolationError(
+                f"Cannot create Innings {target_innings_number}: Match format '{fmt_str}' only supports {format_rules.total_innings} innings"
+            )
 
         # 4. Handle Innings 1
         if target_innings_number == 1:

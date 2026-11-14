@@ -15,6 +15,7 @@ Remove `created_by` from the `matches` model and table schema entirely. Keep the
 
 The `match_access` table is the sole, canonical source of truth for match authorization and ownership:
 - A user with `role = OWNER` in `match_access` is the owner of that match.
+- Sole Owner Invariant: A match's only owner cannot be demoted (e.g. to `SCORER` or `VIEWER`) or revoked; an owner must first grant `OWNER` to another user before relinquishing ownership, guaranteeing that protected matches cannot be orphaned.
 - A match with no entries in `match_access` is an unassigned/legacy fixture (accessible without auth for compatibility with test seeds).
 - A match with any entry in `match_access` is a protected match; modifying it requires explicit permission in `match_access` or superuser privileges.
 

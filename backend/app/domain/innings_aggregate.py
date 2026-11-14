@@ -153,6 +153,16 @@ class InningsAggregate:
         if extra_type in (ExtraType.BYE, ExtraType.LEGBYE) and runs > 0:
             raise RuleViolationError(f"Runs off the bat cannot be scored for {extra_type.value}")
 
+        # Direct dismissals cannot have runs scored off the bat
+        if wicket_type in (
+            WicketType.BOWLED,
+            WicketType.LBW,
+            WicketType.CAUGHT,
+            WicketType.STUMPED,
+            WicketType.HIT_WICKET,
+        ) and runs > 0:
+            raise RuleViolationError(f"Runs off the bat cannot be scored for a {wicket_type.value} dismissal")
+
         # Extra type and dismissal legality
         if extra_type == ExtraType.WIDE and wicket_type in (
             WicketType.BOWLED,
@@ -379,8 +389,8 @@ class InningsAggregate:
         over_completed = False
         if is_legal and self.current_ball_in_over >= self.format_rules.balls_per_over:
             over_completed = True
-            # Batters swap ends at the conclusion of an over if both are established
-            if self.crease.striker_id is not None and self.crease.non_striker_id is not None:
+            # Batters swap ends at the conclusion of an over if at least one batter is established
+            if self.crease.striker_id is not None or self.crease.non_striker_id is not None:
                 self.crease.rotate_strike_at_over_end()
 
             # Record bowler completed over
@@ -420,6 +430,7 @@ class InningsAggregate:
         """Determines if the innings has reached a terminal condition and computes margins."""
         if self.total_wickets >= self.format_rules.max_wickets:
             self.is_completed = True
+            self.crease.awaiting_new_batter = False
             self.completion_reason = f"All out ({self.total_wickets} wickets lost)"
             if self.target is not None:
                 if self.total_runs < self.target - 1:
@@ -433,6 +444,7 @@ class InningsAggregate:
         # Check if target achieved (must be checked BEFORE overs completed!)
         if self.target is not None and self.total_runs >= self.target:
             self.is_completed = True
+            self.crease.awaiting_new_batter = False
             self.completion_reason = f"Target of {self.target} runs reached ({self.total_runs} scored)"
             self.win_margin_wickets = self.format_rules.max_wickets - self.total_wickets
             self.win_margin_runs = None
@@ -440,6 +452,7 @@ class InningsAggregate:
 
         if self.total_legal_balls >= self.format_rules.max_overs * self.format_rules.balls_per_over:
             self.is_completed = True
+            self.crease.awaiting_new_batter = False
             self.completion_reason = f"Completed all {self.format_rules.max_overs} overs"
             if self.target is not None:
                 if self.total_runs < self.target - 1:
@@ -540,7 +553,7 @@ class InningsAggregate:
             aggregate.current_over = d_over
 
             if is_legal and aggregate.current_ball_in_over >= format_rules.balls_per_over:
-                if aggregate.crease.striker_id is not None and aggregate.crease.non_striker_id is not None:
+                if aggregate.crease.striker_id is not None or aggregate.crease.non_striker_id is not None:
                     aggregate.crease.rotate_strike_at_over_end()
                 aggregate.bowler_overs[d_bowler_id] = aggregate.bowler_overs.get(d_bowler_id, 0) + 1
                 aggregate.last_completed_over_bowler_id = d_bowler_id

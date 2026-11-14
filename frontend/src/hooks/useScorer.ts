@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { cricketApi } from '../lib/api-client';
+import { cricketApi, getApiErrorMessage } from '../lib/api-client';
 import { useToast } from '../components/common/Toast';
 import type {
   LiveMatchResponse,
@@ -16,11 +16,6 @@ export { useScorerActions, type UseScorerActionsReturn };
 
 export interface UseScorerOptions {
   onNotify?: (message: string, type: 'success' | 'error' | 'info') => void;
-}
-
-function getErrorMessage(err: unknown): string {
-  const anyErr = err as { response?: { data?: { detail?: string } }; message?: string };
-  return anyErr.response?.data?.detail || anyErr.message || 'Unknown error';
 }
 
 export type UseScorerReturn = UseScorerModalsReturn &
@@ -230,7 +225,7 @@ export function useScorer(matchId: number, options?: UseScorerOptions): UseScore
     inningsNumber,
     modals,
     notify,
-    getErrorMessage,
+    getErrorMessage: getApiErrorMessage,
     invalidateAll,
     scorerState,
     bowlingSquad,

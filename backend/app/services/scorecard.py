@@ -289,12 +289,22 @@ class ScorecardService:
                         WicketType.HIT_WICKET,
                     )
                 )
+                # Calculate maidens for live bowler
+                unique_overs = set(d.over for d in b_deliveries)
+                b_maidens = 0
+                for ov in unique_overs:
+                    ov_deliveries = [d for d in b_deliveries if d.over == ov]
+                    ov_legal = sum(1 for d in ov_deliveries if d.extra_type not in (ExtraType.WIDE, ExtraType.NOBALL))
+                    ov_runs = sum(d.runs + d.extras for d in ov_deliveries if d.extra_type not in (ExtraType.BYE, ExtraType.LEGBYE))
+                    if ov_legal == balls_per_over and ov_runs == 0:
+                        b_maidens += 1
+
                 b_econ = round(b_runs / (b_legal / float(balls_per_over)), 2) if b_legal > 0 else None
                 current_bowler = LiveBowler(
                     player_id=bowler_player.id,
                     name=bowler_player.name,
                     overs=to_overs_record(b_legal, balls_per_over),
-                    maidens=0,
+                    maidens=b_maidens,
                     runs=b_runs,
                     wickets=b_wickets,
                     economy=b_econ,
