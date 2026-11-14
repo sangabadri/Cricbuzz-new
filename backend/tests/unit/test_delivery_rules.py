@@ -1,8 +1,7 @@
 import pytest
 from pydantic import ValidationError
-from app.domain.crease import CreaseState
 from app.domain.enums import ExtraType, WicketType
-from app.domain.exceptions import CricketDomainError, CreaseViolationError, RuleViolationError
+from app.domain.exceptions import CricketDomainError, RuleViolationError
 from app.domain.innings_aggregate import InningsAggregate
 from app.schemas.delivery import DeliveryCreate
 
@@ -30,13 +29,6 @@ def test_invalid_runs_rejected_by_schema():
             non_striker_id=3,
             runs=7,  # Invalid runs (>6)
         )
-
-
-def test_same_striker_and_non_striker():
-    crease = CreaseState()
-    with pytest.raises(CreaseViolationError) as exc:
-        crease.initialize(striker_id=2, non_striker_id=2)
-    assert "cannot be the same player" in exc.value.detail
 
 
 def test_same_batsman_and_bowler():

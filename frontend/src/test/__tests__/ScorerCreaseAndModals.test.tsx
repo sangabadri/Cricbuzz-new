@@ -116,7 +116,7 @@ describe('Scorer Crease, Dismissals & Modals Invariants', () => {
     vi.restoreAllMocks();
   });
 
-  describe('1. WicketModal - Run Out Dismissal Batter Choice', () => {
+  describe('WicketModal - Run Out Dismissal Batter Choice', () => {
     it('renders choice between Striker and Non-Striker with their names when wicketType is run_out', () => {
       const onPlayerOutChange = vi.fn();
 
@@ -180,7 +180,7 @@ describe('Scorer Crease, Dismissals & Modals Invariants', () => {
     });
   });
 
-  describe('2. WicketModal & useScorerActions - Stumping Designated Keeper Invariant', () => {
+  describe('WicketModal & useScorerActions - Stumping Designated Keeper Invariant', () => {
     it('displays designated keeper banner and synchronizes fielderId to keeper on stumping', () => {
       const onFielderChange = vi.fn();
 
@@ -632,7 +632,7 @@ describe('Scorer Crease, Dismissals & Modals Invariants', () => {
     });
   });
 
-  describe('3. Crease HUD - Data Starvation Fix with Live Match Metrics', () => {
+  describe('Crease HUD - Live Match Metrics and Fallbacks', () => {
     it('renders rich batter boundaries and bowler economy when liveTicker is provided', () => {
       render(
         <CreaseHud
@@ -696,7 +696,7 @@ describe('Scorer Crease, Dismissals & Modals Invariants', () => {
     });
   });
 
-  describe('4. BowlerModal - Quota & Eligibility Enforcement', () => {
+  describe('BowlerModal - Quota and Eligibility Enforcement', () => {
     it('disables bowlers not in eligibleBowlerIds with "Over quota / ineligible" badge', () => {
       const onSelectBowler = vi.fn();
 

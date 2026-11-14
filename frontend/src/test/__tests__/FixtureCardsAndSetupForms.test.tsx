@@ -25,7 +25,7 @@ describe('Fixture Cards & Setup Forms', () => {
     vi.restoreAllMocks();
   });
 
-  describe('1. Live Scores on Home Fixture Cards', () => {
+  describe('Live Scores on Home Fixture Cards', () => {
     const liveMatch: Match = {
       id: 101,
       team_a: 1,
@@ -119,7 +119,7 @@ describe('Fixture Cards & Setup Forms', () => {
     });
   });
 
-  describe('2. Decomposed Setup Components', () => {
+  describe('Setup Forms and Squad Selection', () => {
     it('CreateTeamForm allows creating new teams and lists existing teams', async () => {
       const mockTeams: Team[] = [
         { id: 1, name: 'Mumbai Indians' },
@@ -274,7 +274,7 @@ describe('Fixture Cards & Setup Forms', () => {
     });
   });
 
-  describe('3. Multi-Innings and Edge Case Fixture Cards', () => {
+  describe('Multi-Innings and Edge Case Fixture Cards', () => {
     it('formats multi-innings scores with ampersand separator for Test matches', async () => {
       const testMatch: Match = {
         id: 202,

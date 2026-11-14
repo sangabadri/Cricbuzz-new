@@ -1,4 +1,3 @@
-import functools
 import json
 from unittest.mock import AsyncMock
 from app.main import DOMAIN_EXCEPTION_STATUS_MAP, domain_exception_handler
@@ -14,20 +13,7 @@ from app.domain.exceptions import (
     RuleViolationError,
     TokenExpiredOrInvalidError,
 )
-
-
-def sync(async_fn):
-    """Synchronous coroutine runner without Windows socket deadlocks."""
-    @functools.wraps(async_fn)
-    def wrapper(*args, **kwargs):
-        coro = async_fn(*args, **kwargs)
-        val = None
-        try:
-            while True:
-                val = coro.send(val)
-        except StopIteration as exc:
-            return exc.value
-    return wrapper
+from tests.conftest import sync
 
 
 def test_exception_handler_status_map():

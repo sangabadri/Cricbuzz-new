@@ -42,7 +42,7 @@ describe('Scorer Form Encapsulation & Keydown Stabilization', () => {
     vi.restoreAllMocks();
   });
 
-  describe('1. Encapsulated Modal Form State in Dialogs', () => {
+  describe('Encapsulated Modal Form State in Dialogs', () => {
     it('WicketModal manages internal form state and passes complete payload to onConfirm', () => {
       const onConfirm = vi.fn();
       const onClose = vi.fn();
@@ -161,7 +161,7 @@ describe('Scorer Form Encapsulation & Keydown Stabilization', () => {
     });
   });
 
-  describe('2. ScorerConsole Keydown Listener Stabilization', () => {
+  describe('ScorerConsole Keydown Listener Stabilization', () => {
     it('binds keydown listener once and does not unbind/rebind on renders', () => {
       const addEventListenerSpy = vi.spyOn(window, 'addEventListener');
       const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
