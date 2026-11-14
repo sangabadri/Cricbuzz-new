@@ -67,3 +67,11 @@ frontend/src/
 1. **QueryClientProvider**: Supplies the TanStack Query cache.
 2. **AuthProvider**: Manages active user session, token refresh hydration, and logout.
 3. **ToastProvider**: Emits toast notifications for user actions and error alerts.
+
+---
+
+## 4. Route Code-Splitting & Suspense Loading (`src/app/router/index.tsx`)
+
+All page components are dynamically loaded on demand via `React.lazy(() => import(...))` to prevent spectator bundles from downloading heavy admin and scorer chunks. Each route wraps its lazy page inside:
+1. `<ErrorBoundary>` to isolate render errors to the specific page without crashing the shell.
+2. `<React.Suspense fallback={<RouteLoadingFallback />}>` (`src/components/common/RouteLoadingFallback.tsx`) to show an accessible loading indicator during async chunk resolution.
