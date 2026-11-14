@@ -45,7 +45,7 @@ Fix one at a time in refactor-only tasks: write tests first, extract sub-compone
 ---
 
 ## 3. General Frontend Quality & Maintenance Debt
-- `hooks/useScorer.ts` has its own copy of `getErrorMessage`. The shared `getApiErrorMessage` in `api/client.ts` should be used instead.
+- [RESOLVED - 2026-11-14] `hooks/useScorer.ts` has its own copy of `getErrorMessage`: Replaced with canonical `getApiErrorMessage` from `../lib/api-client`.
 - Many hard-coded hex colors in `className` (e.g. `border-[#38bdf8]`, `bg-[#0f172a]`). Theme tokens in Tailwind should be used instead (see `styling-and-ui.md`).
-- Several tests check CSS class names (e.g. `toHaveClass('border-[#38bdf8]')`), making test suites brittle against visual styling changes.
+- [RESOLVED - 2026-11-14] Several tests check CSS class names (e.g. `toHaveClass('border-[#38bdf8]')`): Decoupled assertions in `BattingTable.test.tsx`, `BowlingTable.test.tsx`, and `FixtureCardsAndSetupForms.test.tsx` to assert visibility, document presence, and functional sticky layout instead of hardcoded hex styling.
 - [RESOLVED - 2026-11-14] `src/test/__tests__/` contains files named after development milestones (`stage1DomainCorrectness`, `milestone4Health`, `*.challenger.test.tsx`): Resolved in Slice H by deleting redundant duplicate challenger suites (`boundaries.challenger.test.tsx`, `errorBoundary.challenger.test.tsx`, `matchCenter.challenger.test.tsx`, `matchCenterDecomposition.challenger.test.tsx`, `milestone4Challenger.test.tsx`, `milestone4Health.challenger.test.tsx`, `milestone4Health.test.tsx`), porting unique edge cases to component tests, and renaming remaining stage tests to descriptive behavior names (`ScorerCreaseAndModals.test.tsx`, `ScorerFormEncapsulation.test.tsx`, `FixtureCardsAndSetupForms.test.tsx`).

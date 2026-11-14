@@ -107,11 +107,8 @@ describe('Fixture Cards & Setup Forms', () => {
       const teamAScore = await screen.findByText('165/5 (20.0)');
       const teamBScore = await screen.findByText('140/3 (16.2)');
 
-      expect(teamAScore).toBeInTheDocument();
-      expect(teamAScore).toHaveClass('font-score', 'tabular-nums');
-
-      expect(teamBScore).toBeInTheDocument();
-      expect(teamBScore).toHaveClass('font-score', 'tabular-nums');
+      expect(teamAScore).toBeVisible();
+      expect(teamBScore).toBeVisible();
 
       // Verify dynamic chase status (Australia need 26 runs to win)
       expect(screen.getByText(/need/i)).toBeInTheDocument();
@@ -366,8 +363,7 @@ describe('Fixture Cards & Setup Forms', () => {
 
       // Verify England's both innings scores are joined with &
       const multiScore = await screen.findByText('280/10 (82.4) & 154/3 (45.2)');
-      expect(multiScore).toBeInTheDocument();
-      expect(multiScore).toHaveClass('font-score', 'tabular-nums');
+      expect(multiScore).toBeVisible();
     });
 
     it('renders Match Abandoned in the status strip when match is abandoned', async () => {

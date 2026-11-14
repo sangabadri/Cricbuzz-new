@@ -170,10 +170,10 @@ describe('BowlingTable Component', () => {
 
     const { container } = render(<BowlingTable bowlers={[bowler]} />);
     const th = container.querySelector('th');
-    expect(th).toHaveClass('sticky', 'left-0', 'bg-[#161b22]', 'z-10');
+    expect(th).toHaveClass('sticky', 'left-0');
 
     const td = container.querySelector('tbody td');
-    expect(td).toHaveClass('sticky', 'left-0', 'bg-[#161b22]', 'z-10');
+    expect(td).toHaveClass('sticky', 'left-0');
   });
 });
 
