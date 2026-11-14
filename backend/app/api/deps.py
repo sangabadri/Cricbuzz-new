@@ -18,6 +18,7 @@ from app.repositories.user import UserRepository
 from app.repositories.refresh_token import RefreshTokenRepository
 from app.services.auth import AuthService
 from app.services.delivery import DeliveryService
+from app.services.demo_seed import DemoSeedService
 from app.services.innings import InningsService
 from app.services.match import MatchService
 from app.services.match_access import MatchAccessService
@@ -94,8 +95,9 @@ async def get_match_service(
 async def get_squad_service(
     squad_repo: SquadRepository = Depends(get_squad_repo),
     match_repo: MatchRepository = Depends(get_match_repo),
+    player_repo: PlayerRepository = Depends(get_player_repo),
 ) -> SquadService:
-    return SquadService(squad_repo, match_repo)
+    return SquadService(squad_repo, match_repo, player_repo)
 
 
 async def get_innings_service(
@@ -105,6 +107,16 @@ async def get_innings_service(
     squad_repo: SquadRepository = Depends(get_squad_repo),
 ) -> InningsService:
     return InningsService(innings_repo, match_repo, delivery_repo, squad_repo)
+
+
+async def get_demo_seed_service(
+    team_svc: TeamService = Depends(get_team_service),
+    player_svc: PlayerService = Depends(get_player_service),
+    match_svc: MatchService = Depends(get_match_service),
+    squad_svc: SquadService = Depends(get_squad_service),
+    inn_svc: InningsService = Depends(get_innings_service),
+) -> DemoSeedService:
+    return DemoSeedService(team_svc, player_svc, match_svc, squad_svc, inn_svc)
 
 
 async def get_delivery_service(

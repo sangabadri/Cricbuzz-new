@@ -49,7 +49,7 @@ Measured on 2026-11-12 at commit `225e432`.
 | `reconstruct` | `domain/innings_aggregate.py` | [RESOLVED - 2026-11-14] Decomposed into replay helpers (_replay_single_delivery, _rehydrate_crease_state) |
 | `record_delivery` | `services/delivery.py` | [RESOLVED - 2026-11-14] Decomposed into focused helpers (_resolve_delivery_participants, _sync_match_completion_status) |
 | `validate_delivery_state` | `domain/innings_aggregate.py` | 113 |
-| `seed_demo_match` | `routers/seed.py` | 101 |
+| `seed_demo_match` | `routers/seed.py` | [RESOLVED - 2026-11-14] Procedural demo seeding extracted to `app/services/demo_seed.py` (`DemoSeedService`); router delegates cleanly |
 | `_build_scorer_state` | `services/delivery.py` | 91 |
 
 ### How to fix one (as its own task)
@@ -62,9 +62,9 @@ Measured on 2026-11-12 at commit `225e432`.
 ---
 
 ## 3. General Architecture & Codebase Debt
-- `seed.py` router holds heavy procedural creation logic. Seeding is demo code; keep it isolated from production services.
-- `SquadService._enrich_player_details` sets attributes on model objects with `setattr`. Works, but a response schema built for it would be clearer and type-safe.
-- Comments in `SquadService.create_squad` number two steps "6". Cosmetic.
+- [RESOLVED - 2026-11-14] `seed.py` router holds heavy procedural creation logic: Isolated in `app/services/demo_seed.py` (`DemoSeedService`) with single-service router delegation.
+- [RESOLVED - 2026-11-14] `SquadService._enrich_player_details` sets attributes on model objects with `setattr`: Replaced with typed `SquadResponse` and `SquadPlayerItem` construction.
+- [RESOLVED - 2026-11-14] Comments in `SquadService.create_squad` number two steps "6": Renumbered cleanly to steps 6, 7, 8.
 - `JWT_SECRET_KEY` in `config.py` defaults to a hardcoded string. Must require an environment variable in production.
 - [RESOLVED - 2026-11-14] `CORS_ORIGINS` in `config.py` uses hardcoded localhost origins: Resolved by adding dynamic Pydantic validator supporting JSON array strings, comma-separated environment variables, and fallback dev origins.
 - `sync` test helper exists in multiple test modules. Centralize in `conftest.py`.

@@ -32,3 +32,4 @@ Good:
 
 Costs / things to watch:
 - Unassigned matches must be identified by checking whether any rows exist in `match_access` for that `match_id`. A fast index lookup on `match_access.match_id` handles this in < 1ms.
+- Demo fixtures and squad endpoints wired via `app/api/deps.py` (`get_squad_service`, `get_demo_seed_service`) preserve single-source-of-truth access guards without bypassing `MatchAccessService`.

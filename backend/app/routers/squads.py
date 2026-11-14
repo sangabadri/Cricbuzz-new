@@ -32,5 +32,5 @@ async def get_squad(
     match_id: int,
     team_id: int,
     service: SquadService = Depends(get_squad_service),
-) -> Squad:
+) -> SquadResponse:
     return await service.get_squad(match_id, team_id)

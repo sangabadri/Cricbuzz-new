@@ -11,9 +11,10 @@ This document describes the REST API conventions, route parameters, response for
 - **Standard Identifier**: Integer primary keys (`match_id: int`, `team_id: int`).
 - **Hierarchical Nesting**:
   - Match Access: `/api/v1/matches/{match_id}/access`
-  - Squads: `/api/v1/squads/{match_id}`
+  - Squads: `/api/v1/matches/{match_id}/squad` (POST to submit, GET `/{team_id}` returning `SquadResponse`)
   - Deliveries: `/api/v1/deliveries/{match_id}/{innings_number}`
   - Scorecard: `/api/v1/scorecards/{match_id}`
+  - Demo Seed: `/api/v1/seed/demo-match` (POST returns `SeedResponse` scaffolding an active live fixture)
 
 ---
 
