@@ -42,7 +42,7 @@ Measured on 2026-11-12 at commit `225e432`.
 | Function | File | Lines |
 |---|---|---|
 | `_build_innings_scorecard` | `services/scorecard.py` | [RESOLVED - 2026-11-14] Decomposed 272-line function into 5 focused static projection helpers |
-| `get_live_match_state` | `services/scorecard.py` | 185 |
+| `get_live_match_state` | `services/scorecard.py` | [RESOLVED - 2026-11-14] Decomposed 185-line method into focused static helpers (_build_current_over_balls, _project_live_batter, _project_live_bowler, _calculate_chase_status) |
 | `update_last_delivery` | `services/delivery.py` | 177 |
 | `create_innings` | `services/innings.py` | 167 |
 | `record_ball` | `domain/innings_aggregate.py` | 150 |

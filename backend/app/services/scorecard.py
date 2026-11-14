@@ -188,44 +188,21 @@ class ScorecardService:
         overs = to_overs_record(legal_balls, balls_per_over)
         crr = round(total_runs / (legal_balls / float(balls_per_over)), 2) if legal_balls > 0 else 0.0
 
-        runs_needed = None
-        balls_remaining = None
-        rrr = None
-        if active_innings.target:
-            runs_needed = max(0, active_innings.target - total_runs)
-            max_balls = format_rules.max_overs * balls_per_over
-            balls_remaining = max(0, max_balls - legal_balls)
-            if balls_remaining > 0:
-                rrr = round(runs_needed / (balls_remaining / float(balls_per_over)), 2)
+        runs_needed, balls_remaining, rrr = self._calculate_chase_status(
+            target=active_innings.target,
+            total_runs=total_runs,
+            legal_balls=legal_balls,
+            max_overs=format_rules.max_overs,
+            balls_per_over=balls_per_over,
+        )
 
-        current_over_balls = []
-        last_event_runs = None
-        last_event_is_wicket = False
+        current_over_balls, last_event_runs, last_event_is_wicket = self._build_current_over_balls(deliveries)
         striker = None
         non_striker = None
         current_bowler = None
 
         if deliveries:
             last_ball = deliveries[-1]
-            last_event_runs = last_ball.runs + last_ball.extras
-            last_event_is_wicket = last_ball.wicket_type is not None
-
-            # Balls in current over
-            current_over_number = last_ball.over
-            balls_in_over = [d for d in deliveries if d.over == current_over_number]
-            for b in balls_in_over:
-                current_over_balls.append(
-                    LiveCurrentOverBall(
-                        ball_number=b.ball,
-                        runs=b.runs,
-                        extra_type=b.extra_type,
-                        extras=b.extras,
-                        is_wicket=b.wicket_type is not None,
-                        wicket_type=b.wicket_type,
-                    )
-                )
-
-            # Reconstruct aggregate to project current active crease state
             aggregate = InningsAggregate.reconstruct(
                 innings_id=active_innings.id,
                 match_id=match.id,
@@ -237,7 +214,6 @@ class ScorecardService:
             current_striker_id = aggregate.crease.striker_id
             current_non_striker_id = aggregate.crease.non_striker_id
 
-            # Batch fetch active players
             active_pids = {pid for pid in (current_striker_id, current_non_striker_id, last_ball.bowler_id) if pid is not None}
             players_map = await self.player_repo.get_by_ids(active_pids)
             s_player = players_map.get(current_striker_id) if current_striker_id else None
@@ -245,71 +221,11 @@ class ScorecardService:
             bowler_player = players_map.get(last_ball.bowler_id)
 
             if s_player:
-                s_runs = sum(d.runs for d in deliveries if d.batsman_id == s_player.id)
-                s_balls = sum(1 for d in deliveries if d.batsman_id == s_player.id and d.extra_type != ExtraType.WIDE)
-                s_fours = sum(1 for d in deliveries if d.batsman_id == s_player.id and d.runs == 4)
-                s_sixes = sum(1 for d in deliveries if d.batsman_id == s_player.id and d.runs == 6)
-                s_sr = round((s_runs / s_balls) * 100, 2) if s_balls > 0 else None
-                striker = LiveBatter(
-                    player_id=s_player.id,
-                    name=s_player.name,
-                    runs=s_runs,
-                    balls=s_balls,
-                    fours=s_fours,
-                    sixes=s_sixes,
-                    strike_rate=s_sr,
-                )
-
+                striker = self._project_live_batter(s_player, deliveries)
             if ns_player:
-                ns_runs = sum(d.runs for d in deliveries if d.batsman_id == ns_player.id)
-                ns_balls = sum(1 for d in deliveries if d.batsman_id == ns_player.id and d.extra_type != ExtraType.WIDE)
-                ns_fours = sum(1 for d in deliveries if d.batsman_id == ns_player.id and d.runs == 4)
-                ns_sixes = sum(1 for d in deliveries if d.batsman_id == ns_player.id and d.runs == 6)
-                ns_sr = round((ns_runs / ns_balls) * 100, 2) if ns_balls > 0 else None
-                non_striker = LiveBatter(
-                    player_id=ns_player.id,
-                    name=ns_player.name,
-                    runs=ns_runs,
-                    balls=ns_balls,
-                    fours=ns_fours,
-                    sixes=ns_sixes,
-                    strike_rate=ns_sr,
-                )
-
+                non_striker = self._project_live_batter(ns_player, deliveries)
             if bowler_player:
-                b_deliveries = [d for d in deliveries if d.bowler_id == bowler_player.id]
-                b_legal = sum(1 for d in b_deliveries if d.extra_type not in (ExtraType.WIDE, ExtraType.NOBALL))
-                b_runs = sum(d.runs + d.extras for d in b_deliveries if d.extra_type not in (ExtraType.BYE, ExtraType.LEGBYE))
-                b_wickets = sum(
-                    1 for d in b_deliveries
-                    if d.wicket_type in (
-                        WicketType.BOWLED,
-                        WicketType.CAUGHT,
-                        WicketType.LBW,
-                        WicketType.STUMPED,
-                        WicketType.HIT_WICKET,
-                    )
-                )
-                # Calculate maidens for live bowler
-                unique_overs = set(d.over for d in b_deliveries)
-                b_maidens = 0
-                for ov in unique_overs:
-                    ov_deliveries = [d for d in b_deliveries if d.over == ov]
-                    ov_legal = sum(1 for d in ov_deliveries if d.extra_type not in (ExtraType.WIDE, ExtraType.NOBALL))
-                    ov_runs = sum(d.runs + d.extras for d in ov_deliveries if d.extra_type not in (ExtraType.BYE, ExtraType.LEGBYE))
-                    if ov_legal == balls_per_over and ov_runs == 0:
-                        b_maidens += 1
-
-                b_econ = round(b_runs / (b_legal / float(balls_per_over)), 2) if b_legal > 0 else None
-                current_bowler = LiveBowler(
-                    player_id=bowler_player.id,
-                    name=bowler_player.name,
-                    overs=to_overs_record(b_legal, balls_per_over),
-                    maidens=b_maidens,
-                    runs=b_runs,
-                    wickets=b_wickets,
-                    economy=b_econ,
-                )
+                current_bowler = self._project_live_bowler(bowler_player, deliveries, balls_per_over)
 
         return LiveMatchResponse(
             match_id=match.id,
@@ -338,6 +254,107 @@ class ScorecardService:
         )
 
     get_live_match = get_live_match_state
+
+    @staticmethod
+    def _calculate_chase_status(
+        target: int | None,
+        total_runs: int,
+        legal_balls: int,
+        max_overs: int,
+        balls_per_over: int,
+    ) -> tuple[int | None, int | None, float | None]:
+        """Calculates runs needed, balls remaining, and required run rate (RRR) for a chase."""
+        if not target:
+            return None, None, None
+        runs_needed = max(0, target - total_runs)
+        max_balls = max_overs * balls_per_over
+        balls_remaining = max(0, max_balls - legal_balls)
+        rrr = round(runs_needed / (balls_remaining / float(balls_per_over)), 2) if balls_remaining > 0 else None
+        return runs_needed, balls_remaining, rrr
+
+    @staticmethod
+    def _build_current_over_balls(
+        deliveries: list[Delivery],
+    ) -> tuple[list[LiveCurrentOverBall], int | None, bool]:
+        """Extracts balls bowled in the current over and last ball event flags."""
+        if not deliveries:
+            return [], None, False
+        last_ball = deliveries[-1]
+        last_event_runs = last_ball.runs + last_ball.extras
+        last_event_is_wicket = last_ball.wicket_type is not None
+
+        current_over_number = last_ball.over
+        balls_in_over = [d for d in deliveries if d.over == current_over_number]
+        balls = [
+            LiveCurrentOverBall(
+                ball_number=b.ball,
+                runs=b.runs,
+                extra_type=b.extra_type,
+                extras=b.extras,
+                is_wicket=b.wicket_type is not None,
+                wicket_type=b.wicket_type,
+            )
+            for b in balls_in_over
+        ]
+        return balls, last_event_runs, last_event_is_wicket
+
+    @staticmethod
+    def _project_live_batter(player: Player, deliveries: list[Delivery]) -> LiveBatter:
+        """Projects live batter stats from active delivery records."""
+        runs = sum(d.runs for d in deliveries if d.batsman_id == player.id)
+        balls = sum(1 for d in deliveries if d.batsman_id == player.id and d.extra_type != ExtraType.WIDE)
+        fours = sum(1 for d in deliveries if d.batsman_id == player.id and d.runs == 4)
+        sixes = sum(1 for d in deliveries if d.batsman_id == player.id and d.runs == 6)
+        sr = round((runs / balls) * 100, 2) if balls > 0 else None
+        return LiveBatter(
+            player_id=player.id,
+            name=player.name,
+            runs=runs,
+            balls=balls,
+            fours=fours,
+            sixes=sixes,
+            strike_rate=sr,
+        )
+
+    @staticmethod
+    def _project_live_bowler(
+        bowler_player: Player,
+        deliveries: list[Delivery],
+        balls_per_over: int,
+    ) -> LiveBowler:
+        """Projects current bowler match spell figures and calculated maiden overs."""
+        b_deliveries = [d for d in deliveries if d.bowler_id == bowler_player.id]
+        b_legal = sum(1 for d in b_deliveries if d.extra_type not in (ExtraType.WIDE, ExtraType.NOBALL))
+        b_runs = sum(d.runs + d.extras for d in b_deliveries if d.extra_type not in (ExtraType.BYE, ExtraType.LEGBYE))
+        b_wickets = sum(
+            1 for d in b_deliveries
+            if d.wicket_type in (
+                WicketType.BOWLED,
+                WicketType.CAUGHT,
+                WicketType.LBW,
+                WicketType.STUMPED,
+                WicketType.HIT_WICKET,
+            )
+        )
+        unique_overs = set(d.over for d in b_deliveries)
+        b_maidens = 0
+        for ov in unique_overs:
+            ov_deliveries = [d for d in b_deliveries if d.over == ov]
+            ov_legal = sum(1 for d in ov_deliveries if d.extra_type not in (ExtraType.WIDE, ExtraType.NOBALL))
+            ov_runs = sum(d.runs + d.extras for d in ov_deliveries if d.extra_type not in (ExtraType.BYE, ExtraType.LEGBYE))
+            if ov_legal == balls_per_over and ov_runs == 0:
+                b_maidens += 1
+
+        b_econ = round(b_runs / (b_legal / float(balls_per_over)), 2) if b_legal > 0 else None
+        return LiveBowler(
+            player_id=bowler_player.id,
+            name=bowler_player.name,
+            overs=to_overs_record(b_legal, balls_per_over),
+            maidens=b_maidens,
+            runs=b_runs,
+            wickets=b_wickets,
+            economy=b_econ,
+        )
 
     @staticmethod
     def _build_extras_breakdown(deliveries: list[Delivery]) -> ExtrasBreakdown:
