@@ -4,7 +4,7 @@ This document details how to verify database failure modes, transaction rollback
 
 ---
 
-## 1. Concurrency & Lock Order Testing (`test_delivery_patch_and_concurrency.py`)
+## 1. Concurrency & Lock Order Testing (`test_delivery_concurrency_locks.py`, `test_delivery_patching.py`, `test_delivery_immutability.py`)
 
 To verify that the ADR-0003 row locking order (`Match -> Innings`) prevents deadlocks:
 - **Test Pattern**: Simulate concurrent requests attempting to update the same match and innings using `asyncio.gather()`.
