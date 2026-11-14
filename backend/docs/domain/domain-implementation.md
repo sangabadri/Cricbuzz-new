@@ -66,15 +66,20 @@ The `InningsAggregate` encapsulates an entire innings' scoring state:
    - Confirms match and innings are in progress.
    - Prohibits runs off the bat (`runs > 0`) on direct dismissals (Bowled, Caught, LBW, Stumped, Hit Wicket).
    - Validates bowler quotas and consecutive over limits.
-2. **Extras Allocation**:
-   - Wide / No-ball: `total_runs += 1 + extra_runs`, `balls_in_current_over` is **not incremented**.
-   - Bye / Leg-bye: `total_runs += extra_runs`, `balls_in_current_over += 1`, runs credited to team extras (0 to batter).
-   - Legal: `total_runs += runs_off_bat`, `batter.runs += runs_off_bat`, `balls_in_current_over += 1`.
-3. **Over Progression**: When `balls_in_current_over == 6`, `completed_overs += 1`, `balls_in_current_over = 0`, maiden over status is evaluated, and strike rotates ends.
-4. **Wicket Processing**: Dismissals increment team wickets. If all-out (`wickets == 10`), overs complete, or target reached, innings is marked completed and `awaiting_new_batter` is reset to `False`.
+2. **Crease and Strike Resolution (`_apply_crease_and_strike_events`)**:
+   - Physical running runs: evaluates extras for Bye/Leg-bye or bat runs.
+   - On dismissal: increments total wickets and triggers `crease.handle_dismissal`.
+   - On non-wicket scoring: updates strike rotation via `crease.handle_runs`.
+3. **Over and Counter Progression (`_advance_ball_and_over_counters`)**:
+   - Legal balls: increments `current_ball_in_over` and `total_legal_balls`.
+   - Over completion: when legal balls reach format limit (`format_rules.balls_per_over`), rotates strike at over end, tallies bowler overs, and advances over counter.
+   - Evaluates terminal conditions via `_check_innings_completion`.
 
 ### Reconstructing Aggregate State (`reconstruct`):
-The aggregate can be reconstructed deterministically by replaying an ordered sequence of `Delivery` records from ball 1. This guarantees auditability and powers the **Undo** and **Correction** features.
+The aggregate is reconstructed deterministically from persisted deliveries using two dedicated helpers:
+- `_replay_single_delivery`: Replays each historical ball's runs, extras, wickets, crease alignment, and over progression.
+- `_rehydrate_crease_state`: Applies persistent database crease overrides and resolves `awaiting_new_batter` status.
+This guarantees auditability and powers the **Undo** and **Correction** features without duplicating parsing logic.
 
 ---
 

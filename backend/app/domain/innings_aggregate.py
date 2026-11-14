@@ -275,6 +275,58 @@ class InningsAggregate:
             wicket_keeper_id=wicket_keeper_id,
         )
 
+    def _apply_crease_and_strike_events(
+        self,
+        runs: int,
+        extra_type: ExtraType | None,
+        extras: int,
+        wicket_type: WicketType | None,
+        player_out_id: int | None,
+        new_batter_id: int | None,
+    ) -> None:
+        """Applies wicket dismissal or run-scoring physical strike rotation to the crease."""
+        running_runs = extras if extra_type in (ExtraType.BYE, ExtraType.LEGBYE) else runs
+        if wicket_type is not None and player_out_id is not None:
+            self.total_wickets += 1
+            self.crease.handle_dismissal(
+                out_player_id=player_out_id,
+                new_batter_id=new_batter_id,
+                wicket_type=wicket_type,
+                crossed_runs=running_runs,
+            )
+        else:
+            self.crease.handle_runs(running_runs)
+
+    def _advance_ball_and_over_counters(
+        self,
+        is_legal: bool,
+        bowler_id: int,
+        runs: int,
+        extras: int,
+    ) -> bool:
+        """Updates legal ball counters, total score, over completion, and bowler overs."""
+        if is_legal:
+            self.current_ball_in_over += 1
+            self.total_legal_balls += 1
+
+        self.total_runs += runs + extras
+
+        over_completed = False
+        if is_legal and self.current_ball_in_over >= self.format_rules.balls_per_over:
+            over_completed = True
+            if self.crease.striker_id is not None or self.crease.non_striker_id is not None:
+                self.crease.rotate_strike_at_over_end()
+
+            self.bowler_overs[bowler_id] = self.bowler_overs.get(bowler_id, 0) + 1
+            self.last_completed_over_bowler_id = bowler_id
+            self.current_bowler_id = None
+            self.current_over += 1
+            self.current_ball_in_over = 0
+            self.current_attempt_in_over = 0
+
+        self._check_innings_completion()
+        return over_completed
+
     def record_ball(
         self,
         bowler_id: int | None = None,
@@ -361,48 +413,45 @@ class InningsAggregate:
         active_striker_id = self.crease.striker_id
         active_non_striker_id = self.crease.non_striker_id
 
-        # Physical running happens for runs off bat OR bye / leg-bye extras
-        running_runs = extras if extra_type in (ExtraType.BYE, ExtraType.LEGBYE) else runs
+        # 5. Handle dismissal or runs on the crease
+        self._apply_crease_and_strike_events(
+            runs=runs,
+            extra_type=extra_type,
+            extras=extras,
+            wicket_type=wicket_type,
+            player_out_id=player_out_id,
+            new_batter_id=new_batter_id,
+        )
 
-        # 5. Handle dismissal on the crease if wicket occurred
-        if wicket_type is not None and player_out_id is not None:
-            self.total_wickets += 1
-            self.crease.handle_dismissal(
-                out_player_id=player_out_id,
-                new_batter_id=new_batter_id,
-                wicket_type=wicket_type,
-                crossed_runs=running_runs,
-            )
-        else:
-            # 6. Strike rotation from runs scored
-            self.crease.handle_runs(running_runs)
+        # 6. Advance legal ball and over counters
+        over_completed = self._advance_ball_and_over_counters(
+            is_legal=is_legal,
+            bowler_id=bowler_id,
+            runs=runs,
+            extras=extras,
+        )
 
-        # 7. Increment legal ball counts
-        if is_legal:
-            self.current_ball_in_over += 1
-            self.total_legal_balls += 1
-
-        total_ball_runs = runs + extras
-        self.total_runs += total_ball_runs
-
-        # 8. Check for end of over (6 legal balls bowled)
-        over_completed = False
-        if is_legal and self.current_ball_in_over >= self.format_rules.balls_per_over:
-            over_completed = True
-            # Batters swap ends at the conclusion of an over if at least one batter is established
-            if self.crease.striker_id is not None or self.crease.non_striker_id is not None:
-                self.crease.rotate_strike_at_over_end()
-
-            # Record bowler completed over
-            self.bowler_overs[bowler_id] = self.bowler_overs.get(bowler_id, 0) + 1
-            self.last_completed_over_bowler_id = bowler_id
-            self.current_bowler_id = None
-            self.current_over += 1
-            self.current_ball_in_over = 0
-            self.current_attempt_in_over = 0
-
-        # 9. Evaluate Innings Completion conditions
-        self._check_innings_completion()
+        delivery_record = {
+            "delivery_index": delivery_index,
+            "over": over_number,
+            "ball": ball_number,
+            "is_legal_ball": is_legal,
+            "bowler_id": bowler_id,
+            "batsman_id": active_striker_id,
+            "non_striker_id": active_non_striker_id,
+            "runs": runs,
+            "extra_type": extra_type,
+            "extras": extras,
+            "wicket_type": wicket_type,
+            "player_out_id": player_out_id,
+            "fielder_id": fielder_id,
+            "new_batter_id": new_batter_id,
+            "commentary": commentary,
+            "is_legal": is_legal,
+            "over_completed": over_completed,
+        }
+        self.deliveries.append(delivery_record)
+        return delivery_record
 
         delivery_record = {
             "delivery_index": delivery_index,
@@ -463,6 +512,128 @@ class InningsAggregate:
                     self.win_margin_wickets = 0
             return
 
+    @staticmethod
+    def _replay_single_delivery(aggregate: "InningsAggregate", d: Any, format_rules: Any) -> None:
+        """Replays a single recorded delivery to re-derive aggregate tallies, crease positions, and bowler overs."""
+        d_runs = getattr(d, "runs", 0) if not isinstance(d, dict) else d.get("runs", 0)
+        if d_runs is None:
+            d_runs = 0
+        d_extra_type = getattr(d, "extra_type", d.get("extra_type", None) if isinstance(d, dict) else None)
+        d_extras = getattr(d, "extras", 0) if not isinstance(d, dict) else d.get("extras", 0)
+        if d_extras is None:
+            d_extras = 0
+        d_bowler_id = getattr(d, "bowler_id", d.get("bowler_id", None) if isinstance(d, dict) else None)
+        d_striker_id = getattr(d, "batsman_id", d.get("batsman_id", None) if isinstance(d, dict) else None)
+        d_non_striker_id = getattr(d, "non_striker_id", d.get("non_striker_id", None) if isinstance(d, dict) else None)
+        d_wicket_type = getattr(d, "wicket_type", d.get("wicket_type", None) if isinstance(d, dict) else None)
+        d_player_out = getattr(d, "player_out_id", d.get("player_out_id", None) if isinstance(d, dict) else None)
+        d_fielder_id = getattr(d, "fielder_id", d.get("fielder_id", None) if isinstance(d, dict) else None)
+        d_new_batter_id = getattr(d, "new_batter_id", d.get("new_batter_id", None) if isinstance(d, dict) else None)
+        d_commentary = getattr(d, "commentary", d.get("commentary", None) if isinstance(d, dict) else None)
+        d_delivery_index = getattr(d, "delivery_index", d.get("delivery_index", None) if isinstance(d, dict) else None)
+        d_over = getattr(d, "over", d.get("over", 0) if isinstance(d, dict) else 0)
+        d_ball = getattr(d, "ball", d.get("ball", 1) if isinstance(d, dict) else 1)
+
+        # Align crease
+        if aggregate.crease.striker_id is None and d_striker_id is not None and d_non_striker_id is not None:
+            aggregate.crease.initialize(d_striker_id, d_non_striker_id)
+        elif d_striker_id is not None and d_non_striker_id is not None:
+            aggregate.crease.striker_id = d_striker_id
+            aggregate.crease.non_striker_id = d_non_striker_id
+
+        is_legal = d_extra_type not in (ExtraType.WIDE, ExtraType.NOBALL)
+
+        if d_wicket_type is not None and d_player_out is not None:
+            aggregate.total_wickets += 1
+            if d_player_out not in aggregate.crease.dismissed_player_ids:
+                aggregate.crease.dismissed_player_ids.append(d_player_out)
+            if d_player_out == aggregate.crease.striker_id:
+                aggregate.crease.striker_id = d_new_batter_id
+            elif d_player_out == aggregate.crease.non_striker_id:
+                aggregate.crease.non_striker_id = d_new_batter_id
+            if d_new_batter_id is None and len(aggregate.crease.dismissed_player_ids) < format_rules.max_wickets:
+                aggregate.crease.awaiting_new_batter = True
+
+        running_runs = d_extras if d_extra_type in (ExtraType.BYE, ExtraType.LEGBYE) else d_runs
+        if d_wicket_type is not None:
+            if d_wicket_type == WicketType.RUN_OUT and running_runs % 2 != 0:
+                aggregate.crease.rotate_strike()
+        elif aggregate.crease.striker_id is not None:
+            aggregate.crease.handle_runs(running_runs)
+
+        # Over attempt tracking
+        if aggregate.current_over != d_over:
+            aggregate.current_over = d_over
+            aggregate.current_attempt_in_over = 0
+            aggregate.current_ball_in_over = 0
+
+        aggregate.current_attempt_in_over += 1
+
+        if is_legal:
+            aggregate.current_ball_in_over += 1
+            aggregate.total_legal_balls += 1
+
+        aggregate.total_runs += d_runs + d_extras
+        aggregate.current_bowler_id = d_bowler_id
+        aggregate.current_over = d_over
+
+        if is_legal and aggregate.current_ball_in_over >= format_rules.balls_per_over:
+            if aggregate.crease.striker_id is not None or aggregate.crease.non_striker_id is not None:
+                aggregate.crease.rotate_strike_at_over_end()
+            aggregate.bowler_overs[d_bowler_id] = aggregate.bowler_overs.get(d_bowler_id, 0) + 1
+            aggregate.last_completed_over_bowler_id = d_bowler_id
+            aggregate.current_bowler_id = None
+            aggregate.current_over = d_over + 1
+            aggregate.current_ball_in_over = 0
+            aggregate.current_attempt_in_over = 0
+
+        aggregate.deliveries.append({
+            "delivery_index": d_delivery_index or len(aggregate.deliveries) + 1,
+            "over": d_over,
+            "ball": d_ball,
+            "is_legal_ball": is_legal,
+            "bowler_id": d_bowler_id,
+            "batsman_id": d_striker_id,
+            "non_striker_id": d_non_striker_id,
+            "runs": d_runs,
+            "extra_type": d_extra_type,
+            "extras": d_extras,
+            "wicket_type": d_wicket_type,
+            "player_out_id": d_player_out,
+            "fielder_id": d_fielder_id,
+            "new_batter_id": d_new_batter_id,
+            "commentary": d_commentary,
+            "is_legal": is_legal,
+            "over_completed": is_legal and aggregate.current_ball_in_over == 0,
+        })
+
+    @staticmethod
+    def _rehydrate_crease_state(
+        aggregate: "InningsAggregate",
+        format_rules: Any,
+        current_striker_id: int | None,
+        current_non_striker_id: int | None,
+        current_bowler_id: int | None,
+    ) -> None:
+        """Applies database persisted crease overrides and sets awaiting_new_batter flags."""
+        if current_striker_id is not None:
+            aggregate.crease.striker_id = current_striker_id
+        elif aggregate.crease.striker_id is None and len(aggregate.crease.dismissed_player_ids) > 0:
+            if len(aggregate.crease.dismissed_player_ids) < format_rules.max_wickets:
+                aggregate.crease.awaiting_new_batter = True
+
+        if current_non_striker_id is not None:
+            aggregate.crease.non_striker_id = current_non_striker_id
+        elif aggregate.crease.non_striker_id is None and len(aggregate.crease.dismissed_player_ids) > 0:
+            if len(aggregate.crease.dismissed_player_ids) < format_rules.max_wickets:
+                aggregate.crease.awaiting_new_batter = True
+
+        if current_bowler_id is not None:
+            aggregate.current_bowler_id = current_bowler_id
+
+        if aggregate.crease.striker_id is not None and aggregate.crease.non_striker_id is not None:
+            aggregate.crease.awaiting_new_batter = False
+
     @classmethod
     def reconstruct(
         cls,
@@ -489,117 +660,15 @@ class InningsAggregate:
         )
 
         for d in deliveries:
-            # Replay each delivery state
-            d_runs = getattr(d, "runs", 0) if not isinstance(d, dict) else d.get("runs", 0)
-            if d_runs is None:
-                d_runs = 0
-            d_extra_type = getattr(d, "extra_type", d.get("extra_type", None) if isinstance(d, dict) else None)
-            d_extras = getattr(d, "extras", 0) if not isinstance(d, dict) else d.get("extras", 0)
-            if d_extras is None:
-                d_extras = 0
-            d_bowler_id = getattr(d, "bowler_id", d.get("bowler_id", None) if isinstance(d, dict) else None)
-            d_striker_id = getattr(d, "batsman_id", d.get("batsman_id", None) if isinstance(d, dict) else None)
-            d_non_striker_id = getattr(d, "non_striker_id", d.get("non_striker_id", None) if isinstance(d, dict) else None)
-            d_wicket_type = getattr(d, "wicket_type", d.get("wicket_type", None) if isinstance(d, dict) else None)
-            d_player_out = getattr(d, "player_out_id", d.get("player_out_id", None) if isinstance(d, dict) else None)
-            d_fielder_id = getattr(d, "fielder_id", d.get("fielder_id", None) if isinstance(d, dict) else None)
-            d_new_batter_id = getattr(d, "new_batter_id", d.get("new_batter_id", None) if isinstance(d, dict) else None)
-            d_commentary = getattr(d, "commentary", d.get("commentary", None) if isinstance(d, dict) else None)
-            d_delivery_index = getattr(d, "delivery_index", d.get("delivery_index", None) if isinstance(d, dict) else None)
-            d_over = getattr(d, "over", d.get("over", 0) if isinstance(d, dict) else 0)
-            d_ball = getattr(d, "ball", d.get("ball", 1) if isinstance(d, dict) else 1)
+            cls._replay_single_delivery(aggregate, d, format_rules)
 
-            # Align crease
-            if aggregate.crease.striker_id is None and d_striker_id is not None and d_non_striker_id is not None:
-                aggregate.crease.initialize(d_striker_id, d_non_striker_id)
-            elif d_striker_id is not None and d_non_striker_id is not None:
-                aggregate.crease.striker_id = d_striker_id
-                aggregate.crease.non_striker_id = d_non_striker_id
-
-            is_legal = d_extra_type not in (ExtraType.WIDE, ExtraType.NOBALL)
-
-            if d_wicket_type is not None and d_player_out is not None:
-                aggregate.total_wickets += 1
-                if d_player_out not in aggregate.crease.dismissed_player_ids:
-                    aggregate.crease.dismissed_player_ids.append(d_player_out)
-                if d_player_out == aggregate.crease.striker_id:
-                    aggregate.crease.striker_id = d_new_batter_id
-                elif d_player_out == aggregate.crease.non_striker_id:
-                    aggregate.crease.non_striker_id = d_new_batter_id
-                if d_new_batter_id is None and len(aggregate.crease.dismissed_player_ids) < format_rules.max_wickets:
-                    aggregate.crease.awaiting_new_batter = True
-
-            running_runs = d_extras if d_extra_type in (ExtraType.BYE, ExtraType.LEGBYE) else d_runs
-            if d_wicket_type is not None:
-                if d_wicket_type == WicketType.RUN_OUT and running_runs % 2 != 0:
-                    aggregate.crease.rotate_strike()
-            elif aggregate.crease.striker_id is not None:
-                aggregate.crease.handle_runs(running_runs)
-
-            # Over attempt tracking
-            if aggregate.current_over != d_over:
-                aggregate.current_over = d_over
-                aggregate.current_attempt_in_over = 0
-                aggregate.current_ball_in_over = 0
-
-            aggregate.current_attempt_in_over += 1
-
-            if is_legal:
-                aggregate.current_ball_in_over += 1
-                aggregate.total_legal_balls += 1
-
-            aggregate.total_runs += d_runs + d_extras
-            aggregate.current_bowler_id = d_bowler_id
-            aggregate.current_over = d_over
-
-            if is_legal and aggregate.current_ball_in_over >= format_rules.balls_per_over:
-                if aggregate.crease.striker_id is not None or aggregate.crease.non_striker_id is not None:
-                    aggregate.crease.rotate_strike_at_over_end()
-                aggregate.bowler_overs[d_bowler_id] = aggregate.bowler_overs.get(d_bowler_id, 0) + 1
-                aggregate.last_completed_over_bowler_id = d_bowler_id
-                aggregate.current_bowler_id = None
-                aggregate.current_over = d_over + 1
-                aggregate.current_ball_in_over = 0
-                aggregate.current_attempt_in_over = 0
-
-            aggregate.deliveries.append({
-                "delivery_index": d_delivery_index or len(aggregate.deliveries) + 1,
-                "over": d_over,
-                "ball": d_ball,
-                "is_legal_ball": is_legal,
-                "bowler_id": d_bowler_id,
-                "batsman_id": d_striker_id,
-                "non_striker_id": d_non_striker_id,
-                "runs": d_runs,
-                "extra_type": d_extra_type,
-                "extras": d_extras,
-                "wicket_type": d_wicket_type,
-                "player_out_id": d_player_out,
-                "fielder_id": d_fielder_id,
-                "new_batter_id": d_new_batter_id,
-                "commentary": d_commentary,
-                "is_legal": is_legal,
-                "over_completed": is_legal and aggregate.current_ball_in_over == 0,
-            })
-
-        # Override/rehydrate from DB if provided (especially for 0-delivery or live crease state)
-        if current_striker_id is not None:
-            aggregate.crease.striker_id = current_striker_id
-        elif aggregate.crease.striker_id is None and len(aggregate.crease.dismissed_player_ids) > 0:
-            if len(aggregate.crease.dismissed_player_ids) < format_rules.max_wickets:
-                aggregate.crease.awaiting_new_batter = True
-
-        if current_non_striker_id is not None:
-            aggregate.crease.non_striker_id = current_non_striker_id
-        elif aggregate.crease.non_striker_id is None and len(aggregate.crease.dismissed_player_ids) > 0:
-            if len(aggregate.crease.dismissed_player_ids) < format_rules.max_wickets:
-                aggregate.crease.awaiting_new_batter = True
-
-        if current_bowler_id is not None:
-            aggregate.current_bowler_id = current_bowler_id
-
-        if aggregate.crease.striker_id is not None and aggregate.crease.non_striker_id is not None:
-            aggregate.crease.awaiting_new_batter = False
+        cls._rehydrate_crease_state(
+            aggregate=aggregate,
+            format_rules=format_rules,
+            current_striker_id=current_striker_id,
+            current_non_striker_id=current_non_striker_id,
+            current_bowler_id=current_bowler_id,
+        )
 
         if status == InningsStatus.COMPLETED:
             aggregate.is_completed = True
