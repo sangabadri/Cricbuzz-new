@@ -33,6 +33,11 @@ export function getAccessToken(): string | null {
   return currentAccessToken;
 }
 
+export function getMatchLiveStreamUrl(matchId: number): string {
+  const base = api.defaults.baseURL || '/api/v1';
+  return `${base}/matches/${matchId}/live-stream`;
+}
+
 // Using relative /api prefix which is proxied by Vite in dev and routes to backend in prod
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api/v1',
@@ -45,6 +50,16 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
   if (currentAccessToken && config.headers) {
     config.headers.Authorization = `Bearer ${currentAccessToken}`;
+  }
+  // Automatically inject an Idempotency-Key on delivery mutations if not explicitly set
+  if (config.method?.toLowerCase() === 'post' && config.url?.includes('/deliveries') && config.headers) {
+    if (!config.headers['Idempotency-Key']) {
+      const generatedKey =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      config.headers['Idempotency-Key'] = generatedKey;
+    }
   }
   return config;
 });
@@ -127,6 +142,9 @@ export function getApiErrorMessage(err: unknown, fallback = 'Unknown error'): st
 }
 
 export const cricketApi = {
+  // Real-time Push Live Stream
+  getLiveStreamUrl: (matchId: number): string => getMatchLiveStreamUrl(matchId),
+
   // Matches
   getMatches: async (params?: { status?: string; team_id?: number; limit?: number; offset?: number }): Promise<Match[]> => {
     const res = await api.get<Match[]>('/matches/', { params });
@@ -186,12 +204,15 @@ export const cricketApi = {
   recordDelivery: async (
     matchId: number,
     inningsNumber: number,
-    data: DeliveryCreate
+    data: DeliveryCreate,
+    idempotencyKey?: string
   ): Promise<LiveScorerStateResponse> => {
-    const res = await api.post<LiveScorerStateResponse>(
-      `/matches/${matchId}/innings/${inningsNumber}/deliveries`,
-      data
-    );
+    const url = `/matches/${matchId}/innings/${inningsNumber}/deliveries`;
+    const res = idempotencyKey
+      ? await api.post<LiveScorerStateResponse>(url, data, {
+          headers: { 'Idempotency-Key': idempotencyKey },
+        })
+      : await api.post<LiveScorerStateResponse>(url, data);
     return res.data;
   },
 

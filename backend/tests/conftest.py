@@ -14,6 +14,7 @@ from app.models.squad import Squad, SquadPlayer
 from app.models.team import Team
 from app.models.user import User
 from app.models.refresh_token import RefreshToken
+from app.models.idempotency import IdempotencyRecord
 from app.domain.enums import MatchStatus, InningsStatus, MatchFormat
 from app.domain.exceptions import RuleViolationError, EntityNotFoundError
 from app.schemas.delivery import DeliveryCreate
@@ -38,6 +39,7 @@ from app.api.deps import (
     get_team_service,
     get_user_repo,
     get_refresh_token_repo,
+    get_idempotency_repo,
 )
 from app.services.auth import AuthService
 from app.services.delivery import DeliveryService
@@ -45,6 +47,7 @@ from app.services.innings import InningsService
 from app.services.match import MatchService
 from app.services.player import PlayerService
 from app.services.scorecard import ScorecardService
+from app.services.scorecard_cache import scorecard_cache
 from app.services.squad import SquadService
 from app.services.team import TeamService
 
@@ -187,6 +190,7 @@ class InMemoryStore:
         self.deliveries: dict[int, Delivery] = []
         self.users: dict[int, User] = {}
         self.refresh_tokens: dict[str, RefreshToken] = {}
+        self.idempotency_records: dict[str, Any] = {}
         self._team_seq = 0
         self._player_seq = 0
         self._match_seq = 0
@@ -500,6 +504,32 @@ class InMemoryDeliveryRepository:
         return delivery
 
 
+class InMemoryIdempotencyRepository:
+    def __init__(self, store: InMemoryStore):
+        self.store = store
+
+    async def get(self, endpoint: str, key: str) -> Any | None:
+        return self.store.idempotency_records.get((endpoint, key))
+
+    async def create(
+        self,
+        key: str,
+        endpoint: str,
+        status_code: int,
+        response_body: dict[str, Any],
+        user_id: int | None = None,
+    ) -> Any:
+        record = IdempotencyRecord(
+            key=key,
+            user_id=user_id,
+            endpoint=endpoint,
+            status_code=status_code,
+            response_body=response_body,
+        )
+        self.store.idempotency_records[(endpoint, key)] = record
+        return record
+
+
 @pytest.fixture
 def bypass_startup_lifespan():
     """Bypasses PostgreSQL connection during test startup lifespan."""
@@ -520,6 +550,7 @@ def in_memory_store():
 @pytest.fixture
 def test_client(in_memory_store, bypass_startup_lifespan):
     """Provides zero-deadlock AsgiTestClient wired with in-memory persistence and genuine services."""
+    scorecard_cache.clear()
     from app.main import app
     team_repo = InMemoryTeamRepository(in_memory_store)
     player_repo = InMemoryPlayerRepository(in_memory_store)
@@ -529,13 +560,14 @@ def test_client(in_memory_store, bypass_startup_lifespan):
     delivery_repo = InMemoryDeliveryRepository(in_memory_store)
     user_repo = InMemoryUserRepository(in_memory_store)
     refresh_token_repo = InMemoryRefreshTokenRepository(in_memory_store)
+    idempotency_repo = InMemoryIdempotencyRepository(in_memory_store)
 
     team_service = TeamService(team_repo)
     player_service = PlayerService(player_repo)
     match_service = MatchService(match_repo, team_repo, squad_repo, innings_repo)
     squad_service = SquadService(squad_repo, match_repo)
     innings_service = InningsService(innings_repo, match_repo, delivery_repo, squad_repo)
-    delivery_service = DeliveryService(delivery_repo, innings_repo, match_repo, squad_repo)
+    delivery_service = DeliveryService(delivery_repo, innings_repo, match_repo, squad_repo, idempotency_repo)
     scorecard_service = ScorecardService(match_repo, innings_repo, delivery_repo, player_repo, team_repo)
     auth_service = AuthService(user_repo, refresh_token_repo)
 
@@ -587,11 +619,15 @@ def test_client(in_memory_store, bypass_startup_lifespan):
     async def _delivery_r():
         return delivery_repo
 
+    async def _idempotency_r():
+        return idempotency_repo
+
     app.dependency_overrides[get_team_repo] = _team_r
     app.dependency_overrides[get_player_repo] = _player_r
     app.dependency_overrides[get_squad_repo] = _squad_r
     app.dependency_overrides[get_innings_repo] = _innings_r
     app.dependency_overrides[get_delivery_repo] = _delivery_r
+    app.dependency_overrides[get_idempotency_repo] = _idempotency_r
     app.dependency_overrides[get_team_service] = _team
     app.dependency_overrides[get_player_service] = _player
     app.dependency_overrides[get_match_repo] = _match_r

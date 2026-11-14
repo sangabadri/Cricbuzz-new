@@ -24,8 +24,12 @@ export function useScorerMutations({
   setShowStartInningsModal,
 }: UseScorerMutationsOptions) {
   const recordDeliveryMutation = useMutation({
-    mutationFn: (data: DeliveryCreate) =>
-      cricketApi.recordDelivery(matchId, inningsNumber, data),
+    mutationFn: (data: DeliveryCreate & { idempotencyKey?: string }) => {
+      const { idempotencyKey, ...payload } = data;
+      return idempotencyKey
+        ? cricketApi.recordDelivery(matchId, inningsNumber, payload, idempotencyKey)
+        : cricketApi.recordDelivery(matchId, inningsNumber, payload);
+    },
     onSuccess: (updatedState) => {
       invalidateAll();
       if (updatedState.next_action === 'SET_BOWLER') {

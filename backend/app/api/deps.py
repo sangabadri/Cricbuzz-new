@@ -15,6 +15,7 @@ from app.repositories.squad import SquadRepository
 from app.repositories.team import TeamRepository
 from app.repositories.user import UserRepository
 from app.repositories.refresh_token import RefreshTokenRepository
+from app.repositories.idempotency import IdempotencyRepository
 from app.services.auth import AuthService
 from app.services.delivery import DeliveryService
 from app.services.demo_seed import DemoSeedService
@@ -62,6 +63,10 @@ async def get_user_repo(session: AsyncSession = Depends(get_db)) -> UserReposito
 
 async def get_refresh_token_repo(session: AsyncSession = Depends(get_db)) -> RefreshTokenRepository:
     return RefreshTokenRepository(session)
+
+
+async def get_idempotency_repo(session: AsyncSession = Depends(get_db)) -> IdempotencyRepository:
+    return IdempotencyRepository(session)
 
 
 async def get_team_service(
@@ -117,8 +122,9 @@ async def get_delivery_service(
     innings_repo: InningsRepository = Depends(get_innings_repo),
     match_repo: MatchRepository = Depends(get_match_repo),
     squad_repo: SquadRepository = Depends(get_squad_repo),
+    idempotency_repo: IdempotencyRepository = Depends(get_idempotency_repo),
 ) -> DeliveryService:
-    return DeliveryService(delivery_repo, innings_repo, match_repo, squad_repo)
+    return DeliveryService(delivery_repo, innings_repo, match_repo, squad_repo, idempotency_repo)
 
 
 async def get_scorecard_service(

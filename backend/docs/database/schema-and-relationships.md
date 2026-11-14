@@ -145,3 +145,15 @@ This document details the PostgreSQL relational database schema, tables, foreign
 - `expires_at` (TIMESTAMP WITH TIME ZONE, Not Null)
 - `is_revoked` (BOOLEAN, Default False)
 - `created_at` (TIMESTAMP WITH TIME ZONE)
+
+---
+
+### F. Idempotency & Mutation Safety
+
+#### `idempotency_records`
+- `key` (VARCHAR(128), Primary Key)
+- `user_id` (INTEGER, ForeignKey(`users.id`, ondelete="SET NULL"), Indexed, Nullable)
+- `endpoint` (VARCHAR(255), Not Null)
+- `status_code` (INTEGER, Default 201, Not Null)
+- `response_body` (JSON, Not Null)
+- `created_at` (TIMESTAMP WITH TIME ZONE, Indexed)

@@ -41,6 +41,7 @@ This document defines the exact responsibilities, boundaries, and import constra
 - Executes database queries using `session.execute(select(...))`.
 - Adds new entity instances via `self.session.add(...)`.
 - Calls `await self.session.flush()` when generated primary keys (IDs) are needed immediately.
+- `IdempotencyRepository` (`app/repositories/idempotency.py`): Scoped persistence and lookup for mutation idempotency records by composite key `(endpoint, key)`.
 - **Never commits**: Transaction commit is the exclusive duty of `get_db()`.
 
 ### E. Services Layer (`app/services/`)

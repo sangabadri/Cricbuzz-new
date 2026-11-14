@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, status
-from app.api.deps import get_delivery_service, require_match_owner
+from fastapi import APIRouter, Depends, Header, status
+from app.api.deps import get_current_user_optional, get_delivery_service, require_match_owner
 from app.models.delivery import Delivery
 from app.models.innings import Innings
+from app.models.user import User
 from app.schemas.delivery import (
     DeliveryCreate,
     DeliveryResponse,
@@ -27,9 +28,22 @@ async def record_delivery(
     match_id: int,
     innings_number: int,
     delivery_in: DeliveryCreate,
+    idempotency_key: str | None = Header(
+        None,
+        alias="Idempotency-Key",
+        description="Optional unique key to ensure delivery mutation idempotency across retries",
+    ),
+    current_user: User | None = Depends(get_current_user_optional),
     service: DeliveryService = Depends(get_delivery_service),
 ) -> LiveScorerStateResponse:
-    return await service.record_delivery(match_id, innings_number, delivery_in, return_state=True)
+    return await service.record_delivery(
+        match_id=match_id,
+        innings_number=innings_number,
+        delivery_in=delivery_in,
+        return_state=True,
+        idempotency_key=idempotency_key,
+        user_id=current_user.id if current_user else None,
+    )
 
 
 @router.post(

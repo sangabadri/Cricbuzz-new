@@ -25,7 +25,7 @@ Cricbuzz Tracker is organized into two standalone workspaces—a Python **FastAP
 |   |   API Client: Axios (withCredentials: true, Refresh Coalescing)        |   |
 |   +------------------------------------------------------------------------+   |
 +---------------------------------------|----------------------------------------+
-                                        | HTTP / JSON REST (/api/v1)
+                                        | HTTP / JSON REST (/api/v1) & SSE (/live-stream)
                                         | (Bearer Token + httpOnly Cookie)
 +---------------------------------------v----------------------------------------+
 |                                BACKEND LAYER                                   |
@@ -33,11 +33,14 @@ Cricbuzz Tracker is organized into two standalone workspaces—a Python **FastAP
 |   +------------------------------------------------------------------------+   |
 |   |                      FastAPI Application (Port 8000)                   |   |
 |   |                                                                        |   |
-|   |   [ Routers ]        Matches, Deliveries, Scorecards, Squads, Auth     |   |
+|   |   [ Routers ]        Matches, Deliveries, Scorecards, Auth, Health     |   |
 |   |       |                                                                |   |
 |   |   [ Dependencies ]   api/deps.py (Pure FastAPI Depends wiring)         |   |
+|   |       |              - Match ownership & Idempotency repo injection    |   |
 |   |       |                                                                |   |
 |   |   [ Services ]       Business flows, transaction orchestration         |   |
+|   |       |              - MatchEventBus (in-process SSE pub/sub broker)   |   |
+|   |       |              - ScorecardCache (in-memory bounded LRU cache)    |   |
 |   |       |              Raises pure domain exceptions                     |   |
 |   |       +----------->  [ Domain Engine ] (Pure Python)                   |   |
 |   |       |              - CreaseState & Batting Crease Invariants         |   |
@@ -49,15 +52,19 @@ Cricbuzz Tracker is organized into two standalone workspaces—a Python **FastAP
 |   |   [ ORM Models ]     SQLAlchemy Declarative Base                       |   |
 |   +-----------------------------------|------------------------------------+   |
 +---------------------------------------|----------------------------------------+
-                                        | AsyncPG (AsyncPool)
+                                        | AsyncPG (AsyncPool) / redis.asyncio
 +---------------------------------------v----------------------------------------+
-|                              PERSISTENCE LAYER                                 |
+|                              PERSISTENCE & DISTRIBUTED CACHE LAYER             |
 |                                                                                |
 |   +------------------------------------------------------------------------+   |
 |   |                      PostgreSQL 16 Database                            |   |
-|   |                                                                        |   |
 |   |   Tables: matches, innings, deliveries, squads, squad_players,         |   |
-|   |           players, teams, users, refresh_tokens                        |   |
+|   |           players, teams, users, refresh_tokens, idempotency_records   |   |
+|   +------------------------------------------------------------------------+   |
+|   |                      Redis 7 Distributed Layer                         |   |
+|   |   - Multi-pod Pub/Sub channel (cricbuzz:match:{id})                    |   |
+|   |   - Distributed Scorecard Cache (cricbuzz:scorecard:{id}, 24h TTL)     |   |
+|   |   - Atomic Sliding Rate Limiting (cricbuzz:ratelimit:{tier}:{ip})      |   |
 |   +------------------------------------------------------------------------+   |
 +--------------------------------------------------------------------------------+
 ```
@@ -87,10 +94,11 @@ Cricbuzz Tracker is organized into two standalone workspaces—a Python **FastAP
   5. Strictly delegate all cricket calculations to the backend; the UI never computes runs, overs, strike, or winners locally.
 
 ### C. Container & Infrastructure Layer (`docker-compose.yaml`, `k8s/`)
-- **Local Dev / Testing**: Docker Compose runs PostgreSQL 16 container and FastAPI app with volume hot-reloading.
+- **Local Dev / Testing**: Docker Compose runs PostgreSQL 16 container, Redis 7 Alpine container, and FastAPI app with volume hot-reloading.
 - **Kubernetes**: Production-ready declarative manifests in `k8s/`:
   - `postgres-statefulset.yaml`: PersistentVolumeClaim-backed stateful PostgreSQL.
   - `postgres-service.yaml` & `postgres-configmap.yaml` & `postgres-secret.yaml`: Secure database connectivity.
+  - `redis-deployment.yaml` & `redis-service.yaml`: Low-latency standalone Redis 7 with readiness/liveness probes.
   - `api-deployment.yaml`: FastAPI deployment with rolling updates, liveness, and readiness probes.
   - `api-service.yaml`: ClusterIP service routing traffic to backend pods.
 

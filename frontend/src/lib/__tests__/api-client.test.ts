@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { api, cricketApi, getApiErrorMessage, getAccessToken, setAccessToken } from '../api-client';
+import { api, cricketApi, getApiErrorMessage, getAccessToken, setAccessToken, getMatchLiveStreamUrl } from '../api-client';
 
 describe('API Client Environment & Configuration', () => {
   const originalAdapter = api.defaults.adapter;
@@ -382,5 +382,56 @@ describe('API Client Environment & Configuration', () => {
 
     expect(spy).toHaveBeenCalledWith('/auth/logout');
     expect(getAccessToken()).toBeNull();
+  });
+
+  it('verifies cricketApi.recordDelivery passes Idempotency-Key header when provided', async () => {
+    const mockState = { match_id: 1, total_runs: 4 };
+    const spy = vi.spyOn(api, 'post').mockResolvedValueOnce({ data: mockState });
+
+    const result = await cricketApi.recordDelivery(1, 1, { runs: 4 }, 'uuid-idemp-1234');
+
+    expect(spy).toHaveBeenCalledWith(
+      '/matches/1/innings/1/deliveries',
+      { runs: 4 },
+      { headers: { 'Idempotency-Key': 'uuid-idemp-1234' } }
+    );
+    expect(result).toEqual(mockState);
+  });
+
+  it('verifies cricketApi.recordDelivery omits Idempotency-Key header when not provided', async () => {
+    const mockState = { match_id: 1, total_runs: 1 };
+    const spy = vi.spyOn(api, 'post').mockResolvedValueOnce({ data: mockState });
+
+    const result = await cricketApi.recordDelivery(1, 1, { runs: 1 });
+
+    expect(spy).toHaveBeenCalledWith(
+      '/matches/1/innings/1/deliveries',
+      { runs: 1 }
+    );
+    expect(result).toEqual(mockState);
+  });
+
+  it('request interceptor automatically injects Idempotency-Key on POST /deliveries', async () => {
+    let capturedHeaders: any = null;
+    api.defaults.adapter = async (config) => {
+      capturedHeaders = config.headers;
+      return {
+        data: { success: true },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config,
+      };
+    };
+
+    await api.post('/matches/1/innings/1/deliveries', { runs: 1 });
+
+    expect(capturedHeaders['Idempotency-Key']).toBeDefined();
+    expect(typeof capturedHeaders['Idempotency-Key']).toBe('string');
+  });
+
+  it('generates the correct Server-Sent Events live stream URL for a match', () => {
+    expect(getMatchLiveStreamUrl(42)).toBe('/api/v1/matches/42/live-stream');
+    expect(cricketApi.getLiveStreamUrl(42)).toBe('/api/v1/matches/42/live-stream');
   });
 });

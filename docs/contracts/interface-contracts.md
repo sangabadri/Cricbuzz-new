@@ -67,6 +67,8 @@ This document defines the interface contracts between the Frontend and Backend, 
 | `GET` | `/api/v1/innings/{match_id}/{innings_number}` | Public | Get innings status and summary. |
 
 ### D. Deliveries & Live Scoring
+- **Idempotency Guarantee**: Scorer mutations accept an optional `Idempotency-Key` header (UUID v4). When supplied, `DeliveryService` performs double-checked locking under pessimistic row locks to safely return previously recorded response bodies on network retries without duplicating deliveries or re-advancing overs.
+
 | Method | Endpoint | Role Required | Description |
 |---|---|---|---|
 | `POST` | `/api/v1/matches/{match_id}/innings/{innings_number}/deliveries` | Scorer / Owner | Record delivery (`DeliveryCreate`). Supports optional `Idempotency-Key` header to safely retry mutations without duplicate deliveries. Returns `LiveScorerStateResponse`. |

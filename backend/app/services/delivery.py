@@ -12,6 +12,9 @@ from app.repositories.delivery import DeliveryRepository
 from app.repositories.innings import InningsRepository
 from app.repositories.match import MatchRepository
 from app.repositories.squad import SquadRepository
+from app.repositories.idempotency import IdempotencyRepository
+from app.services.event_bus import match_event_bus, MatchEventBus
+from app.services.scorecard_cache import scorecard_cache, ScorecardCache
 from app.schemas.delivery import DeliveryCreate, LiveScorerStateResponse, ManualDeliveryUpdate
 from typing import Any
 from app.domain.enums import ExtraType, InningsStatus, MatchStatus, WicketType
@@ -75,11 +78,17 @@ class DeliveryService:
         innings_repo: InningsRepository,
         match_repo: MatchRepository | None = None,
         squad_repo: SquadRepository | None = None,
+        idempotency_repo: IdempotencyRepository | None = None,
+        event_bus: MatchEventBus | None = None,
+        cache: ScorecardCache | None = None,
     ):
         self.delivery_repo = delivery_repo
         self.innings_repo = innings_repo
         self.match_repo = match_repo
         self.squad_repo = squad_repo
+        self.idempotency_repo = idempotency_repo
+        self.event_bus = event_bus or match_event_bus
+        self.cache = cache or scorecard_cache
 
     async def _get_match(self, match_id: int, for_update: bool = False) -> Match | None:
         """Loads match row with optional pessimistic row lock (SELECT ... FOR UPDATE)."""
@@ -340,12 +349,24 @@ class DeliveryService:
         innings_number: int,
         delivery_in: DeliveryCreate,
         return_state: bool = False,
+        idempotency_key: str | None = None,
+        user_id: int | None = None,
     ) -> Delivery | LiveScorerStateResponse:
         """
         Records a new ball bowled in the innings using InningsAggregate.
         Auto-updates strike rotation, bowler quota, and detects innings transitions.
         Acquires aggregate row lock before reading state.
+        Guarantees idempotency when an idempotency_key is provided.
         """
+        endpoint = f"/matches/{match_id}/innings/{innings_number}/deliveries"
+
+        # 0. Fast-path check for idempotency before acquiring row locks
+        if idempotency_key and self.idempotency_repo:
+            existing_record = await self.idempotency_repo.get(endpoint=endpoint, key=idempotency_key)
+            if existing_record:
+                if return_state:
+                    return LiveScorerStateResponse.model_validate(existing_record.response_body)
+
         match = await self._get_match(match_id, for_update=True)
         if match and match.status == MatchStatus.COMPLETED:
             raise RuleViolationError("Match is already completed")
@@ -355,6 +376,13 @@ class DeliveryService:
             raise EntityNotFoundError(f"Innings {innings_number} for Match {match_id} not found")
         if innings.status == InningsStatus.COMPLETED:
             raise OverProgressionError(f"Innings {innings_number} is already completed")
+
+        # Double-check idempotency under lock to handle concurrent in-flight retries
+        if idempotency_key and self.idempotency_repo:
+            existing_record = await self.idempotency_repo.get(endpoint=endpoint, key=idempotency_key)
+            if existing_record:
+                if return_state:
+                    return LiveScorerStateResponse.model_validate(existing_record.response_body)
 
         # 1. Load existing deliveries and reconstruct aggregate
         existing_deliveries = await self.delivery_repo.list_by_innings(innings.id)
@@ -430,10 +458,49 @@ class DeliveryService:
         await self._sync_match_completion_status(match, innings, aggregate)
         await self.innings_repo.save(innings)
 
+        state_response: LiveScorerStateResponse | None = None
         if return_state:
             all_deliveries = existing_deliveries + [created_delivery]
-            return await self._build_scorer_state(match, innings, aggregate, all_deliveries)
+            state_response = await self._build_scorer_state(match, innings, aggregate, all_deliveries)
 
+        # Persist idempotency record when key is provided
+        if idempotency_key and self.idempotency_repo:
+            if state_response is None:
+                all_deliveries = existing_deliveries + [created_delivery]
+                state_response = await self._build_scorer_state(match, innings, aggregate, all_deliveries)
+            await self.idempotency_repo.create(
+                key=idempotency_key,
+                user_id=user_id,
+                endpoint=endpoint,
+                status_code=201,
+                response_body=state_response.model_dump(mode="json"),
+            )
+
+        # Broadcast real-time SSE event to live spectators
+        if self.event_bus:
+            self.event_bus.publish(
+                match_id=match_id,
+                event="delivery_recorded",
+                data={
+                    "match_id": match_id,
+                    "innings_number": innings_number,
+                    "over": created_delivery.over,
+                    "ball": created_delivery.ball,
+                    "runs": created_delivery.runs,
+                    "extra_type": str(created_delivery.extra_type.value) if created_delivery.extra_type else None,
+                    "wicket_type": str(created_delivery.wicket_type.value) if created_delivery.wicket_type else None,
+                    "total_runs": aggregate.total_runs,
+                    "total_wickets": aggregate.total_wickets,
+                },
+            )
+
+        if return_state and state_response is not None:
+            if self.cache:
+                await self.cache.invalidate_async(match_id)
+            return state_response
+
+        if self.cache:
+            await self.cache.invalidate_async(match_id)
         return created_delivery
 
     async def set_bowler(self, match_id: int, innings_number: int, bowler_id: int) -> Innings:
@@ -479,7 +546,14 @@ class DeliveryService:
 
         aggregate.set_bowler(bowler_id)
         innings.current_bowler_id = bowler_id
-        return await self.innings_repo.save(innings)
+        saved_innings = await self.innings_repo.save(innings)
+        if self.event_bus:
+            self.event_bus.publish(
+                match_id=match_id,
+                event="bowler_changed",
+                data={"match_id": match_id, "innings_number": innings_number, "bowler_id": bowler_id},
+            )
+        return saved_innings
 
     async def set_incoming_batter(self, match_id: int, innings_number: int, player_id: int) -> Innings:
         """
@@ -527,7 +601,14 @@ class DeliveryService:
         aggregate.crease.assign_incoming_batter(player_id)
         innings.current_striker_id = aggregate.crease.striker_id
         innings.current_non_striker_id = aggregate.crease.non_striker_id
-        return await self.innings_repo.save(innings)
+        saved_innings = await self.innings_repo.save(innings)
+        if self.event_bus:
+            self.event_bus.publish(
+                match_id=match_id,
+                event="batter_changed",
+                data={"match_id": match_id, "innings_number": innings_number, "player_id": player_id},
+            )
+        return saved_innings
 
     async def swap_strike(self, match_id: int, innings_number: int) -> Innings:
         """
@@ -566,7 +647,14 @@ class DeliveryService:
         aggregate.crease.swap_strike()
         innings.current_striker_id = aggregate.crease.striker_id
         innings.current_non_striker_id = aggregate.crease.non_striker_id
-        return await self.innings_repo.save(innings)
+        saved_innings = await self.innings_repo.save(innings)
+        if self.event_bus:
+            self.event_bus.publish(
+                match_id=match_id,
+                event="strike_swapped",
+                data={"match_id": match_id, "innings_number": innings_number},
+            )
+        return saved_innings
 
     async def _assert_delivery_mutable(
         self,
@@ -702,6 +790,16 @@ class DeliveryService:
         await self._sync_match_completion_status(match, innings, aggregate, is_reversal=True)
         await self.innings_repo.save(innings)
 
+        if self.cache:
+            await self.cache.invalidate_async(match_id)
+
+        if self.event_bus:
+            self.event_bus.publish(
+                match_id=match_id,
+                event="delivery_patched",
+                data={"match_id": match_id, "innings_number": innings_number, "delivery_id": saved_ball.id},
+            )
+
         return saved_ball
 
     async def undo_last_delivery(self, match_id: int, innings_number: int) -> Delivery:
@@ -738,6 +836,16 @@ class DeliveryService:
 
         await self._sync_match_completion_status(match, innings, aggregate, is_reversal=True)
         await self.innings_repo.save(innings)
+
+        if self.cache:
+            await self.cache.invalidate_async(match_id)
+
+        if self.event_bus:
+            self.event_bus.publish(
+                match_id=match_id,
+                event="delivery_undone",
+                data={"match_id": match_id, "innings_number": innings_number, "delivery_id": last_ball.id},
+            )
 
         return last_ball
 
