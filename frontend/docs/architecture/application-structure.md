@@ -29,7 +29,7 @@ frontend/src/
 ├── components/
 │   ├── ui/                       # Atomic building blocks (Button, Modal, Card, Table, Tabs)
 │   ├── common/                   # Cross-cutting widgets (ErrorBoundary, Toast, StatusBadge)
-│   └── scorer/                   # Console widgets (CreaseHud, DeliveryKeypad, modals)
+│   └── scorer/                   # Console widgets (CreaseHud, DeliveryKeypad, keypad/, modals/)
 │
 ├── lib/                          # Single API client & pure utility functions
 │   └── api-client.ts             # Canonical backend gateway

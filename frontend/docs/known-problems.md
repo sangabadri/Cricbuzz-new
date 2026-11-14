@@ -31,7 +31,7 @@ Do not fix these while doing other work. Do not make them worse. Fix them only i
 |---|---|---|
 | `components/setup/ScheduleMatchForm.tsx` | 449 | < 150 (max 250) |
 | `features/scoring/pages/ScorerConsolePage.tsx` | 433 | < 150 (max 250) |
-| `components/scorer/DeliveryKeypad.tsx` | 351 | < 150 (max 250) |
+| `components/scorer/DeliveryKeypad.tsx` | [RESOLVED - 2026-11-14] Decomposed from 351 lines to 137 lines across keypad/ sub-components | < 150 (max 250) |
 | `hooks/useScorerActions.ts` | 337 | < 200 |
 | `features/dashboard/pages/DashboardOverviewPage.tsx` | 290 | < 150 (max 250) |
 | `hooks/useScorer.ts` | 259 | < 200 |
