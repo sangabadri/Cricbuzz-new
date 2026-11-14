@@ -4,6 +4,7 @@ from app.domain.rules.formats import get_format_rules
 from app.models.delivery import Delivery
 from app.models.innings import Innings
 from app.models.match import Match
+from app.models.player import Player
 from app.repositories.delivery import DeliveryRepository
 from app.repositories.innings import InningsRepository
 from app.repositories.match import MatchRepository
@@ -338,30 +339,14 @@ class ScorecardService:
 
     get_live_match = get_live_match_state
 
-    async def _build_innings_scorecard(
-        self,
-        innings: Innings,
-        match: Match,
-        batting_team_name: str,
-        bowling_team_name: str,
-        deliveries: list[Delivery],
-    ) -> InningsScorecard:
-        """Internal projection algorithm building an InningsScorecard with zero N+1 queries."""
-        format_rules = get_format_rules(match.format)
-        balls_per_over = format_rules.balls_per_over
-
-        # 1. Total runs, wickets, overs, extras
-        total_runs = sum(d.runs + d.extras for d in deliveries)
-        total_wickets = sum(1 for d in deliveries if d.wicket_type is not None)
-        legal_balls = sum(1 for d in deliveries if d.extra_type not in (ExtraType.WIDE, ExtraType.NOBALL))
-        overs = to_overs_record(legal_balls, balls_per_over)
-        crr = round(total_runs / (legal_balls / float(balls_per_over)), 2) if legal_balls > 0 else 0.0
-
+    @staticmethod
+    def _build_extras_breakdown(deliveries: list[Delivery]) -> ExtrasBreakdown:
+        """Calculates extras tally across wide, no ball, bye, and leg bye categories."""
         byes = sum(d.extras for d in deliveries if d.extra_type == ExtraType.BYE)
         leg_byes = sum(d.extras for d in deliveries if d.extra_type == ExtraType.LEGBYE)
         wides = sum(d.extras for d in deliveries if d.extra_type == ExtraType.WIDE)
         no_balls = sum(d.extras for d in deliveries if d.extra_type == ExtraType.NOBALL)
-        extras = ExtrasBreakdown(
+        return ExtrasBreakdown(
             byes=byes,
             leg_byes=leg_byes,
             wides=wides,
@@ -369,23 +354,12 @@ class ScorecardService:
             total=byes + leg_byes + wides + no_balls,
         )
 
-        # Collect all unique player IDs across all deliveries for batch retrieval
-        player_ids: set[int] = set()
-        for d in deliveries:
-            player_ids.add(d.batsman_id)
-            player_ids.add(d.non_striker_id)
-            player_ids.add(d.bowler_id)
-            if d.player_out_id:
-                player_ids.add(d.player_out_id)
-            if d.fielder_id:
-                player_ids.add(d.fielder_id)
-            if getattr(d, "new_batter_id", None):
-                player_ids.add(d.new_batter_id)
-
-        # Single batch query for all players
-        players_map = await self.player_repo.get_by_ids(player_ids)
-
-        # 2. Batting scorecard
+    @staticmethod
+    def _build_batting_scorecards(
+        deliveries: list[Delivery],
+        players_map: dict[int, Player],
+    ) -> list[BatterScorecard]:
+        """Projects deliveries into individual batter stats and dismissal records."""
         batting_cards: list[BatterScorecard] = []
         ordered_batter_ids: list[int] = []
         for d in deliveries:
@@ -396,7 +370,6 @@ class ScorecardService:
             if getattr(d, "new_batter_id", None) and d.new_batter_id not in ordered_batter_ids:
                 ordered_batter_ids.append(d.new_batter_id)
 
-        # Map dismissals
         dismissal_map: dict[int, DismissalInfo] = {}
         for d in deliveries:
             if d.wicket_type is not None and d.player_out_id is not None:
@@ -435,8 +408,15 @@ class ScorecardService:
                     dismissal=dismissal_map.get(b_id),
                 )
             )
+        return batting_cards
 
-        # 3. Bowling scorecard
+    @staticmethod
+    def _build_bowling_scorecards(
+        deliveries: list[Delivery],
+        balls_per_over: int,
+        players_map: dict[int, Player],
+    ) -> list[BowlerScorecard]:
+        """Projects deliveries into bowler figures including maiden overs and economy rate."""
         bowling_cards: list[BowlerScorecard] = []
         ordered_bowler_ids: list[int] = []
         for d in deliveries:
@@ -463,7 +443,6 @@ class ScorecardService:
                 )
             )
 
-            # Maiden overs calculation
             unique_overs = set(d.over for d in b_deliveries)
             maidens = 0
             for ov in unique_overs:
@@ -487,8 +466,15 @@ class ScorecardService:
                     no_balls=b_noballs,
                 )
             )
+        return bowling_cards
 
-        # 4. Fall of Wickets
+    @staticmethod
+    def _build_fall_of_wickets(
+        deliveries: list[Delivery],
+        balls_per_over: int,
+        players_map: dict[int, Player],
+    ) -> list[FallOfWicket]:
+        """Calculates progressive fall of wickets timeline."""
         fall_of_wickets: list[FallOfWicket] = []
         running_score = 0
         running_legal_balls = 0
@@ -509,8 +495,15 @@ class ScorecardService:
                         overs=to_overs_record(running_legal_balls, balls_per_over),
                     )
                 )
+        return fall_of_wickets
 
-        # 5. Partnerships
+    @staticmethod
+    def _build_partnerships(
+        deliveries: list[Delivery],
+        balls_per_over: int,
+        players_map: dict[int, Player],
+    ) -> list[Partnership]:
+        """Calculates all wicket and unbroken close-of-innings partnerships."""
         partnerships: list[Partnership] = []
         current_p_runs = 0
         current_p_balls = 0
@@ -588,6 +581,49 @@ class ScorecardService:
                     ],
                 )
             )
+        return partnerships
+
+    async def _build_innings_scorecard(
+        self,
+        innings: Innings,
+        match: Match,
+        batting_team_name: str,
+        bowling_team_name: str,
+        deliveries: list[Delivery],
+    ) -> InningsScorecard:
+        """Internal projection algorithm building an InningsScorecard with zero N+1 queries."""
+        format_rules = get_format_rules(match.format)
+        balls_per_over = format_rules.balls_per_over
+
+        # 1. Total runs, wickets, overs, extras
+        total_runs = sum(d.runs + d.extras for d in deliveries)
+        total_wickets = sum(1 for d in deliveries if d.wicket_type is not None)
+        legal_balls = sum(1 for d in deliveries if d.extra_type not in (ExtraType.WIDE, ExtraType.NOBALL))
+        overs = to_overs_record(legal_balls, balls_per_over)
+        crr = round(total_runs / (legal_balls / float(balls_per_over)), 2) if legal_balls > 0 else 0.0
+
+        extras = self._build_extras_breakdown(deliveries)
+
+        # 2. Collect unique player IDs and batch query
+        player_ids: set[int] = set()
+        for d in deliveries:
+            player_ids.add(d.batsman_id)
+            player_ids.add(d.non_striker_id)
+            player_ids.add(d.bowler_id)
+            if d.player_out_id:
+                player_ids.add(d.player_out_id)
+            if d.fielder_id:
+                player_ids.add(d.fielder_id)
+            if getattr(d, "new_batter_id", None):
+                player_ids.add(d.new_batter_id)
+
+        players_map = await self.player_repo.get_by_ids(player_ids)
+
+        # 3. Project batting, bowling, fall of wickets, partnerships
+        batting_cards = self._build_batting_scorecards(deliveries, players_map)
+        bowling_cards = self._build_bowling_scorecards(deliveries, balls_per_over, players_map)
+        fall_of_wickets = self._build_fall_of_wickets(deliveries, balls_per_over, players_map)
+        partnerships = self._build_partnerships(deliveries, balls_per_over, players_map)
 
         return InningsScorecard(
             innings_id=innings.id,

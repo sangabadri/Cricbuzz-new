@@ -49,6 +49,7 @@ This document defines the exact responsibilities, boundaries, and import constra
 - Enforces deterministic row locking (`for_update=True`, ADR-0003: Match locked first, then Innings).
 - Enforces entity lifecycle guards (e.g. `InningsService` rejecting innings creation on completed/abandoned matches or exceeding format limits).
 - Enforces access boundaries (e.g. `MatchAccessService` safeguarding sole match ownership against demotion or revocation).
+- Employs focused single-responsibility projection helpers (e.g. `ScorecardService` decomposing scorecard assembly into `_build_batting_scorecards`, `_build_bowling_scorecards`, `_build_fall_of_wickets`, and `_build_partnerships` with zero N+1 database queries).
 - Raises pure domain exceptions on invariant violations.
 
 ### F. Routers Layer (`app/routers/`)
