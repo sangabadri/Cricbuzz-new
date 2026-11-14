@@ -60,6 +60,13 @@ frontend/src/
 - `useScorerKeyboardShortcuts`: Manages non-intrusive physical key bindings for ball recording and wicket triggers.
 - `useScorerMutations`: Encapsulates TanStack Query mutation definitions and cache invalidation side effects for scoring operations.
 - `useScorerActions`: Pure action orchestration layer handling confirmation states, modal workflows, and validation before delegating to mutations.
+- `useEnrichedScorerState`: Projects raw scorer state with rich live ticker metrics, batter/bowler figures, and squad player metadata.
+- `CreaseHud`: Decomposed crease console widget (< 50 lines) composed of `CreaseBroadcastStrip`, `CreaseParticipantsGrid`, and `CreaseRecentRibbon`.
+
+### Match Center Decomposition (`src/features/matches/`)
+- `MatchDetailPage`: Screen coordinator (< 175 lines) rendering broadcast hero, tabs, and real-time feeds.
+- `useMatchCenterQueries`: Consolidated query hook managing ticker, scorecard, commentary deliveries, and squad data with live polling.
+- `MatchCenterTabsNav`: Accessible sub-navigation ribbon across crease analysis, full scorecard, mobile commentary, and squads.
 
 ### Dashboard Overview Decomposition (`src/features/dashboard/`)
 - `DashboardOverviewPage`: Composes overall dashboard metrics, quick workflows, and recent match activity (< 100 lines).

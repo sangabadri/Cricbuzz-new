@@ -1,26 +1,17 @@
 import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import {
-  Activity,
-  AlertCircle,
-  ChevronRight,
-  PlayCircle,
-  Radio,
-  RotateCcw,
-  ScrollText,
-  Users,
-} from 'lucide-react';
-import { cricketApi } from '../../../lib/api-client';
+import { AlertCircle, ChevronRight, PlayCircle, RotateCcw } from 'lucide-react';
 import { MatchCenterHero } from '../components/MatchCenterHero';
 import { CreaseTab } from '../components/CreaseTab';
 import { ScorecardTab } from '../components/ScorecardTab';
 import { SquadsTab } from '../components/SquadsTab';
 import { CommentaryTab } from '../components/CommentaryTab';
 import { CommentaryFeed } from '../components/CommentaryFeed';
+import { MatchCenterTabsNav, type MatchCenterTab } from '../components/MatchCenterTabsNav';
+import { useMatchCenterQueries } from '../hooks/useMatchCenterQueries';
 import { Button } from '../../../components/ui/Button';
 
-export type MatchCenterTab = 'crease' | 'scorecard' | 'squads' | 'commentary';
+export type { MatchCenterTab };
 
 export const MatchDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -28,61 +19,20 @@ export const MatchDetailPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<MatchCenterTab>('crease');
   const [selectedCommentaryInnings, setSelectedCommentaryInnings] = useState<number | null>(null);
 
-  // 1. Live Match Ticker Query (polls every 3s when match is live)
   const {
-    data: ticker,
-    isLoading: isTickerLoading,
-    isError: isTickerError,
-    refetch: refetchLiveTicker,
-  } = useQuery({
-    queryKey: ['liveTicker', matchId],
-    queryFn: () => cricketApi.getLiveTicker(matchId),
-    enabled: !isNaN(matchId),
-    refetchInterval: (query) => {
-      const state = query.state.data;
-      return state?.status === 'live' || state?.status === 'innings_break' ? 3000 : 15000;
-    },
-  });
-
-  // 2. Full Match Scorecard Query
-  const {
-    data: scorecard,
-    isLoading: isScorecardLoading,
-    isError: isScorecardError,
-  } = useQuery({
-    queryKey: ['scorecard', matchId],
-    queryFn: () => cricketApi.getScorecard(matchId),
-    enabled: !isNaN(matchId),
-    refetchInterval: (query) => {
-      const state = query.state.data;
-      return state?.status === 'live' ? 5000 : false;
-    },
-  });
-
-  // Determine current innings to show deliveries for
-  const currentInningsNumber = ticker?.current_innings_number || 1;
-  const commentaryInnings = selectedCommentaryInnings ?? currentInningsNumber;
-
-  // 3. Deliveries Query
-  const { data: deliveries = [] } = useQuery({
-    queryKey: ['deliveries', matchId, commentaryInnings],
-    queryFn: () => cricketApi.getDeliveries(matchId, commentaryInnings),
-    enabled: !isNaN(matchId) && !!commentaryInnings,
-    refetchInterval: () => (ticker?.status === 'live' ? 3000 : false),
-  });
-
-  // 4. Squad Queries for Team A & Team B
-  const { data: squadA } = useQuery({
-    queryKey: ['squad', matchId, scorecard?.team_a_id],
-    queryFn: () => cricketApi.getSquad(matchId, scorecard!.team_a_id),
-    enabled: !isNaN(matchId) && !!scorecard?.team_a_id,
-  });
-
-  const { data: squadB } = useQuery({
-    queryKey: ['squad', matchId, scorecard?.team_b_id],
-    queryFn: () => cricketApi.getSquad(matchId, scorecard!.team_b_id),
-    enabled: !isNaN(matchId) && !!scorecard?.team_b_id,
-  });
+    ticker,
+    isTickerLoading,
+    isTickerError,
+    refetchLiveTicker,
+    scorecard,
+    isScorecardLoading,
+    isScorecardError,
+    deliveries,
+    squadA,
+    squadB,
+    commentaryInnings,
+    availableInnings,
+  } = useMatchCenterQueries(matchId, selectedCommentaryInnings);
 
   if (isTickerLoading) {
     return (
@@ -168,33 +118,7 @@ export const MatchDetailPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* Left Column (Scorecards & Crease HUD) - 7 cols */}
         <div className="lg:col-span-7 space-y-5">
-          {/* Sub Navigation Tabs */}
-          <div className="flex border-b border-[#21262d] gap-2 overflow-x-auto">
-            {([
-              { id: 'crease', label: 'Crease Analysis', icon: Radio, mobileOnly: false },
-              { id: 'scorecard', label: 'Full Scorecard', icon: ScrollText, mobileOnly: false },
-              { id: 'commentary', label: 'Commentary', icon: Activity, mobileOnly: true },
-              { id: 'squads', label: 'Playing XI & Squads', icon: Users, mobileOnly: false },
-            ] as const satisfies readonly { id: MatchCenterTab; label: string; icon: React.ComponentType<{ className?: string }>; mobileOnly: boolean }[]).map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-                    tab.mobileOnly ? 'lg:hidden ' : ''
-                  }${
-                    activeTab === tab.id
-                      ? 'border-[#0070f3] text-sky-400 bg-[#0070f3]/10'
-                      : 'border-transparent text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
+          <MatchCenterTabsNav activeTab={activeTab} onTabChange={setActiveTab} />
 
           {/* Tab 1: Crease View */}
           {activeTab === 'crease' && <CreaseTab ticker={ticker} />}
@@ -226,7 +150,7 @@ export const MatchDetailPage: React.FC = () => {
               deliveries={deliveries}
               title="Live Commentary Stream"
               inningsNumber={commentaryInnings}
-              availableInnings={scorecard?.innings.map((i) => i.innings_number) || [1]}
+              availableInnings={availableInnings}
               onInningsChange={(inn) => setSelectedCommentaryInnings(inn)}
             />
           )}
@@ -238,7 +162,7 @@ export const MatchDetailPage: React.FC = () => {
             deliveries={deliveries}
             title="Live Commentary Stream"
             inningsNumber={commentaryInnings}
-            availableInnings={scorecard?.innings.map((i) => i.innings_number) || [1]}
+            availableInnings={availableInnings}
             onInningsChange={(inn) => setSelectedCommentaryInnings(inn)}
           />
         </div>

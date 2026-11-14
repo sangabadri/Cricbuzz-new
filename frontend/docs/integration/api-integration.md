@@ -90,7 +90,7 @@ export function getApiErrorMessage(error: unknown): string {
 ```
 
 > [!IMPORTANT]
-> **Invariant (frontend/AGENTS.md #4)**: Never re-implement error parsing or extraction locally inside components or hooks (e.g. `useScorer.ts`). All custom hooks, mutators, and pages must import and invoke canonical `getApiErrorMessage` directly from `src/lib/api-client` to guarantee consistent toast feedback and domain error visibility across the application.
+> **Invariant (frontend/AGENTS.md #4)**: Never re-implement error parsing or extraction locally inside components or hooks (e.g. `useScorer.ts`). All custom hooks (`useScorer.ts`, `useScorerActions.ts`, `useScorerMutations.ts`, `useEnrichedScorerState.ts`), mutators, and pages must import and invoke canonical `getApiErrorMessage` directly from `src/lib/api-client` to guarantee consistent toast feedback and domain error visibility across the application.
 
 ---
 

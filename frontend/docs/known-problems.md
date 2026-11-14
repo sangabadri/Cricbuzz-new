@@ -34,9 +34,9 @@ Do not fix these while doing other work. Do not make them worse. Fix them only i
 | `components/scorer/DeliveryKeypad.tsx` | [RESOLVED - 2026-11-14] Decomposed from 351 lines to 137 lines across keypad/ sub-components | < 150 (max 250) |
 | `hooks/useScorerActions.ts` | [RESOLVED - 2026-11-14] Decomposed from 337 lines to 205 lines via dedicated useScorerMutations hook | < 200 |
 | `features/dashboard/pages/DashboardOverviewPage.tsx` | [RESOLVED - 2026-11-14] Decomposed from 290 lines to 88 lines via DashboardMetricsGrid, DashboardWorkflowsGrid, and DashboardRecentMatchesTable | < 150 (max 250) |
-| `hooks/useScorer.ts` | 259 | < 200 |
-| `features/matches/pages/MatchDetailPage.tsx` | 248 | < 150 (max 250) |
-| `components/scorer/CreaseHud.tsx` | 240 | < 150 (max 250) |
+| `hooks/useScorer.ts` | [RESOLVED - 2026-11-14] Decomposed from 254 lines to 172 lines via useEnrichedScorerState hook | < 200 |
+| `features/matches/pages/MatchDetailPage.tsx` | [RESOLVED - 2026-11-14] Decomposed from 248 lines to 170 lines via useMatchCenterQueries hook and MatchCenterTabsNav | < 150 (max 250) |
+| `components/scorer/CreaseHud.tsx` | [RESOLVED - 2026-11-14] Decomposed from 240 lines to 44 lines across crease/ sub-components (CreaseBroadcastStrip, CreaseParticipantsGrid, CreaseRecentRibbon) | < 150 (max 250) |
 | `features/dashboard/pages/AdminMatchesPage.tsx` | 238 | < 150 (max 250) |
 | `features/home/components/HeroSection.tsx` | 230 | < 150 (max 250) |
 
