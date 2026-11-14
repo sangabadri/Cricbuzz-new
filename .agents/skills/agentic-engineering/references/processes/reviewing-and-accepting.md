@@ -25,10 +25,22 @@ Empty input, duplicates, wrong state (for example scoring in a completed match),
 two requests at once, half-finished operations, a response shaped differently than expected,
 old features accidentally changed.
 
+## Anti-Hallucination & Circular Truth Review (Checking Doc Changes)
+
+> [!CAUTION]
+> **The Circular Truth Trap**: If a subagent makes a mistake in code, it might alter the documentation to match its mistake (e.g. changing `cricket-rules.md` to permit runs on bowled dismissals). If a reviewer only reads the modified file on disk, the code and doc will look consistent, hiding the bug.
+
+### Reviewer Anti-Hallucination Protocol:
+1. **Never read raw doc files in isolation**: Inspect `git diff HEAD` for both code AND documentation.
+2. **Compare against canonical baseline**: Run `git show HEAD:<doc>` (or `origin/main:<doc>`) to see the baseline rule before the author touched it.
+3. **Autonomy boundary check (AGENTS.md Section 4)**: Cricket domain rules and security decisions are strictly in the "STOP AND ASK" tier. If an author modified canonical cricket rules in `docs/domain/cricket-rules.md` or security contracts without an explicit user instruction in the task brief, **flag it as an immediate HIGH SEVERITY REJECTION**.
+
 ## Second agent prompt (read-only)
 > You are a reviewer. Do not edit files. Inputs: the task brief, the approved plan, and `git diff main...HEAD`.
+> Check both code and documentation diffs against the canonical baseline (`git show HEAD:<doc>`).
 > Report: findings by severity (high, medium, low), each with file and function and a scenario that fails;
-> missing tests; places where the design rules were broken; and a recommendation: accept,
+> missing tests; places where the design rules were broken; any unauthorized modifications to canonical
+> cricket rules or security invariants (Circular Truth detection); and a recommendation: accept,
 > accept with changes, or reject. Check the whole request path, not just one layer.
 
 ## Choosing how much checking

@@ -6,62 +6,80 @@ A production-grade, real-time cricket match tracking and live scoring applicatio
 
 ## 🏗️ Repository Architecture
 
-The codebase is cleanly divided into standalone **backend** and **frontend** workspaces, with multi-service orchestration and deployment manifests at the root:
+The codebase is organized into standalone **backend** and **frontend** workspaces, with multi-service orchestration and Kubernetes manifests at the repository root:
 
-```
+```text
 cricbuzz-tracker/
+├── AGENTS.md                         # Global instructions and autonomy rules for AI coding agents
+├── README.md                         # Project overview and quick start guide
+├── docker-compose.yaml               # Local multi-container stack (PostgreSQL + FastAPI)
+│
+├── docs/                             # Project Knowledge Base & Architecture Documentation
+│   ├── README.md                     # Documentation index & agent navigation guide
+│   ├── product/                      # Product vision, personas, and identifiable requirements
+│   │   ├── overview.md
+│   │   └── requirements.md
+│   ├── architecture/                 # High-level system topology, clean architecture, and boundaries
+│   │   └── system-overview.md
+│   ├── domain/                       # Cricket domain model, crease invariants, and format rules
+│   │   ├── domain-model.md
+│   │   └── cricket-rules.md
+│   ├── contracts/                    # REST API specifications, auth cookie contracts, error formats
+│   │   └── interface-contracts.md
+│   ├── development/                  # Workflows for features, bugfixes, refactoring, and commits
+│   │   ├── development-workflow.md
+│   │   ├── feature-development.md
+│   │   ├── bug-fixing.md
+│   │   ├── refactoring.md
+│   │   ├── commit-guidelines.md
+│   │   └── code-review-and-completion.md
+│   ├── testing/                      # 7-dimension testing strategy, traceability matrix, quality gates
+│   │   ├── testing-strategy.md
+│   │   ├── requirements-to-tests.md
+│   │   └── quality-gates.md
+│   ├── deployment/                   # Docker Compose and Kubernetes deployment guide
+│   │   └── deployment-guide.md
+│   ├── decisions/                    # Architectural Decision Records (ADRs 0001 through 0007)
+│   ├── examples/                     # Worked task walkthroughs (Small, Medium, Large)
+│   └── notes/                        # Session handoffs and milestone tracking
+│
 ├── backend/                          # Standalone Python FastAPI Backend
+│   ├── AGENTS.md                     # Backend-specific architecture and layer rules
+│   ├── docs/                         # Backend internal guides and technical debt registers
 │   ├── app/                          # Clean Architecture / Domain-Driven API
-│   │   ├── domain/                   # Pure business logic (Crease state, rules, aggregates, exceptions)
-│   │   ├── models/                   # SQLAlchemy ORM models (Match, Innings, Delivery, Squad, Player, Team)
+│   │   ├── domain/                   # Pure business logic (Crease state, format strategies, exceptions)
+│   │   ├── models/                   # SQLAlchemy ORM models (Match, Innings, Delivery, Squad, User)
 │   │   ├── repositories/             # Database access layer (Async PostgreSQL)
-│   │   ├── routers/                  # API endpoints (Matches, Deliveries, Scorecards, Squads, Teams, Seed)
+│   │   ├── routers/                  # API endpoints (Matches, Deliveries, Scorecards, Auth)
 │   │   ├── schemas/                  # Pydantic v2 validation contracts
-│   │   ├── services/                 # Application business logic layer
+│   │   ├── services/                 # Application business logic & transaction orchestration
 │   │   ├── config.py                 # App settings
 │   │   ├── database.py               # Async DB session engine
-│   │   └── main.py                   # FastAPI app entry with CORS middleware
-│   ├── tests/                        # 100 passing unit and E2E lifecycle tests
-│   │   ├── conftest.py               # Test fixtures and SQLite in-memory test DB
-│   │   ├── e2e/                      # Match lifecycle and seed test suites
-│   │   └── unit/                     # Domain, service, rules, and exception unit tests
-│   ├── Dockerfile                    # Container definition for FastAPI API
-│   ├── .dockerignore                 # Container build exclusion patterns
-│   ├── pytest.ini                    # Pytest configuration & test path definition
-│   └── requirements.txt              # Pinned Python package dependencies
+│   │   └── main.py                   # FastAPI app entry with CORS and error handlers
+│   └── tests/                        # 185 passing unit, domain, architecture, and E2E lifecycle tests
+│       ├── conftest.py               # SQLite in-memory test fixtures and ASGI client
+│       ├── e2e/                      # Match lifecycle, auth, and seed test suites
+│       └── unit/                     # Domain rules, crease, aggregates, and service unit tests
 │
 ├── frontend/                         # Standalone Modern React + Vite Frontend
-│   ├── src/
-│   │   ├── api/client.ts             # Axios client connected via Vite proxy & CORS
-│   │   ├── types/cricket.ts          # Strongly typed domain TypeScript definitions
-│   │   ├── hooks/useScorer.ts        # Dedicated scoring hook (state, mutations, query invalidations)
-│   │   ├── components/
-│   │   │   ├── common/               # Atomic reusable UI components (BallBubble, StatusBadge, Toast)
-│   │   │   ├── match/                # Spectator Match Center modular views (BattingTable, BowlingTable, CommentaryFeed)
-│   │   │   ├── scorer/               # Scorer Console subcomponents (CreaseHud, DeliveryKeypad, Modals)
-│   │   │   └── Navbar.tsx            # Brand header with 1-Click Demo Seed button
-│   │   ├── pages/
-│   │   │   ├── Home.tsx              # Match Hub (Live, Scheduled, Completed filters)
-│   │   │   ├── MatchCenter.tsx       # 4-Tab Spectator Center (Live, Scorecard, Commentary, Squads)
-│   │   │   ├── ScorerConsole.tsx     # Clean Scorer Pad UI
-│   │   │   └── SetupWizard.tsx       # Team, Player, Match creation & Toss manager
-│   │   ├── App.tsx                   # Route definitions & ToastProvider wrapper
-│   │   └── main.tsx                  # React entry point with TanStack QueryClient
-│   ├── package.json                  # Frontend dependencies & scripts
-│   ├── vite.config.ts                # Vite config with Tailwind v4 & /api reverse proxy
-│   └── tsconfig.json                 # TypeScript compiler configuration
+│   ├── AGENTS.md                     # Frontend-specific architecture and component rules
+│   ├── docs/                         # Frontend internal guides and technical debt registers
+│   └── src/
+│       ├── app/                      # App shell (Layouts, Query/Auth providers, React Router)
+│       ├── features/                 # Feature-sliced modules (matches, scoring, setup, auth)
+│       ├── components/
+│       │   ├── ui/                   # Reusable atomic UI components (Button, Modal, Card, Table)
+│       │   ├── common/               # Global components (ErrorBoundary, Toast, StatusBadge)
+│       │   └── scorer/               # Scorer console widgets (CreaseHud, DeliveryKeypad)
+│       ├── lib/                      # Canonical API client (Axios, 401 refresh coalescing)
+│       ├── types/                    # Strongly typed domain TypeScript definitions
+│       └── test/                     # Test setup and shared test helpers (131 Vitest tests)
 │
-├── k8s/                              # Kubernetes Deployment & Service Manifests
-│   ├── api-deployment.yaml           # API deployment with health & readiness probes
-│   ├── api-service.yaml              # ClusterIP service for API
-│   ├── postgres-configmap.yaml       # Database configuration map
-│   ├── postgres-secret.yaml          # Database credentials secret
-│   ├── postgres-service.yaml         # Database service
-│   └── postgres-statefulset.yaml     # PostgreSQL persistent statefulset
-│
-├── docker-compose.yaml               # Local multi-container stack (PostgreSQL + FastAPI backend)
-├── .gitignore                        # Monorepo git exclusion patterns
-└── README.md                         # Project documentation
+└── k8s/                              # Kubernetes Deployment & Service Manifests
+    ├── api-deployment.yaml           # API deployment with health & readiness probes
+    ├── api-service.yaml              # ClusterIP service for API
+    ├── postgres-statefulset.yaml     # PostgreSQL persistent statefulset
+    └── postgres-configmap.yaml       # Database configuration maps and secrets
 ```
 
 ---
@@ -95,26 +113,30 @@ npm run dev
 
 ---
 
-## 🧪 Running Tests & Builds
+## 🧪 Running Tests & Quality Gates
+
+### Automated Pre-Flight Quality Gate
+Run the unified repository quality gate script before and after making changes:
+```powershell
+python .agents/skills/agentic-engineering/scripts/audit_gate.py --full
+```
+Verifies backend domain isolation, frontend UI isolation, backend test suite, frontend lint, and frontend typecheck/build.
 
 ### Backend Test Suite
-Run the 100-test suite from either the backend directory or project root:
 ```powershell
-# From backend/:
 cd backend
 ..\.venv\Scripts\pytest.exe
-
-# Or from project root:
-.venv\Scripts\pytest.exe -c backend/pytest.ini backend
 ```
-Result: **100 passed in <1s**.
+Result: **185 passed** across unit, domain, architecture, and E2E test suites in <4s.
 
-### Frontend Typecheck & Production Build
+### Frontend Lint, Tests & Production Build
 ```powershell
 cd frontend
-npm run build
+npm run lint          # Run linter
+npm test -- --run     # Run 131 Vitest tests
+npm run build         # Production TypeScript compile & Vite bundle
 ```
-Result: **0 errors** (`tsc -b && vite build`).
+Result: **131 passed**, 0 lint errors, 0 type errors.
 
 ---
 
@@ -124,4 +146,4 @@ To run PostgreSQL and the FastAPI backend using Docker Compose:
 ```powershell
 docker-compose up --build
 ```
-The API container builds directly from `./backend/Dockerfile` and automatically mounts `./backend` for hot reloading.
+The API container builds from `./backend/Dockerfile` and connects to the PostgreSQL container.

@@ -13,5 +13,15 @@
         ]
       }
     ]
+  },
+  "cricbuzz-doc-sync-stop": {
+    "enabled": true,
+    "Stop": [
+      {
+        "type": "command",
+        "command": "python .agents/skills/agentic-engineering/scripts/stop_doc_guard.py",
+        "timeout": 10
+      }
+    ]
   }
 }

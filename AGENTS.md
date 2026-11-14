@@ -1,64 +1,111 @@
-# Agent Rules (read this first)
+# Agent Rules & Global Engineering Instructions
 
-Cricbuzz Tracker: cricket scoring app. Backend: FastAPI + async SQLAlchemy + PostgreSQL.
-Frontend: React + TypeScript + Vite + Tailwind + TanStack Query.
+Cricbuzz Tracker is a real-time cricket scoring and live match tracking system.
+- **Backend**: Python 3.11, FastAPI, async SQLAlchemy 2.0, PostgreSQL, Pydantic v2, pytest.
+- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS v4, TanStack Query v5, Axios, React Router, Vitest.
 
-## Read order
-1. This file.
-2. The AGENTS.md of the part you are changing: `backend/AGENTS.md` or `frontend/AGENTS.md`.
-3. The guides that file points to. Do not read everything. Read what the task needs.
-4. Then the real code. **The code is the truth for how things work now. Docs can be old.**
+---
 
-## Current state (keep this true)
-- Auth, users, and match access exist on `main`, but contain documented architectural debt (`docs/decisions/0005-no-auth.md`, `backend/docs/known-problems.md`). Do not replicate or expand these patterns without a written design plan.
-- Public spectator match viewing and scorecards must always remain unauthenticated.
-- Backend tests must pass before and after your change.
-- Frontend tests, lint and build must pass before and after your change (fix TS build errors before adding code).
+## 1. Instruction Hierarchy & Read Order
 
-## Five rules that matter most
-1. **Do only what the task says.** No extra refactors, renames, new libraries or "cleanups".
-2. **Do not guess business rules.** If a cricket rule or requirement is unclear, stop and ask.
-3. **One purpose per commit.** Never mix a feature, a restructure and a new system in one commit.
-4. **Tests come from the requirement, not from your code.** Test what should happen.
-5. **Say what you did not do.** Report skipped work and failing tests honestly.
+Always follow this read order based on the scope of your task:
+1. **This file (`/AGENTS.md`)**: Global instructions, autonomy limits, and engineering standards.
+2. **Subsystem Instructions**:
+   - Backend tasks: [`backend/AGENTS.md`](backend/AGENTS.md)
+   - Frontend tasks: [`frontend/AGENTS.md`](frontend/AGENTS.md)
+3. **Workspace Skill**: [`.agents/skills/agentic-engineering/SKILL.md`](.agents/skills/agentic-engineering/SKILL.md) for task sizing, checklists, and automated gates.
+4. **Relevant Topic Documentation**: Read only what the task needs from [`docs/README.md`](docs/README.md).
+5. **The Real Code**: **The source code and automated tests are the final truth.** If documentation and implementation disagree, investigate and report the discrepancy.
 
-## How much freedom you have
-| Level | What it covers | What you do |
+---
+
+## 2. Fundamental System Invariants (Keep These True)
+
+- **Public Spectator Access**: Public spectator match viewing, live status, and scorecards must ALWAYS remain completely unauthenticated (ADR-0005).
+- **Domain Purity**: `backend/app/domain/` contains pure cricket rules and must NEVER import FastAPI, SQLAlchemy, or Pydantic (ADR-0001, enforced by automated tests).
+- **Single Source of Auth Truth**: Match ownership and scorer access reside solely in the `match_access` table with `role = MatchUserRole.OWNER` or `SCORER` (ADR-0007).
+- **Scoring Lock Order**: All methods that mutate match or innings state lock rows in the exact order: **match first, then innings** (`for_update=True`, ADR-0003).
+- **No Client-Side Cricket Rules**: The frontend never calculates scores, overs, strike rotation, or wickets. The backend decides; the frontend displays (ADR-0006).
+- **Pre-Flight and Post-Flight Quality Gates**: All backend tests (185) and frontend checks (lint, 131 tests, build) must pass before and after your change.
+
+---
+
+## 3. The Five Core Rules for AI Coding Agents
+
+1. **Do only what the task says**: No opportunistic refactoring, unsolicited renames, new packages, or unsolicited "cleanups".
+2. **Do not guess business rules**: If a cricket rule or requirement is unclear, stop and ask.
+3. **One purpose per commit**: Never mix a feature addition, a restructure, and a bug fix in one commit.
+4. **Tests come from requirements, not code**: Test what should happen, including negative, boundary, and failure cases.
+5. **Say what you did not do**: Report skipped scenarios, known limitations, and open questions honestly.
+
+---
+
+## 4. Autonomy Boundaries: What You Can Do
+
+| Level | What it Covers | Action Required |
 |---|---|---|
-| Go ahead | Names, small helpers, simple validation, ordinary tests | Just do it |
-| Propose first | New service methods, new queries, new components or hooks, moving code | Write a short proposal, then continue inside what was approved |
-| Stop and ask | Database tables or columns, API shape changes, new folder layers, new libraries, security, deleting data, cricket rule changes | Stop. Explain. Give 2 options. Wait. |
+| **Go Ahead** | Names, small internal helpers, simple validation, ordinary unit tests. | Implement directly. |
+| **Propose First** | New service methods, queries, components, hooks, moving files. | Write a brief proposal, get sign-off, then build. |
+| **Stop and Ask** | Database tables/columns, API shapes, auth/security, cricket rules, deleting code. | **Stop immediately.** Explain. Provide 2 clear options with trade-offs. Wait for decision. |
 
-If the approved plan turns out to be wrong halfway, **stop at that point** and tell the human.
-Do not quietly change the design.
+If an approved plan proves wrong midway through execution, **stop at that point** and alert the human. Never quietly modify the design.
 
-## Engineering Workflow Skill
-Follow the workspace skill `.agents/skills/agentic-engineering/` (`SKILL.md`) for task sizing, pre-flight checks, 3-tier autonomy, automated quality gates, and review loops.
-To classify your task scope automatically:
-```bash
-python .agents/skills/agentic-engineering/scripts/diff_inspector.py
+---
+
+## 5. Working Across Components & Shared File Ownership
+
+When a change touches both backend and frontend:
+1. **Vertical Sequence**: Complete backend schemas, services, endpoints, and E2E tests before touching the frontend.
+2. **Synchronize Contracts**: Update TypeScript definitions (`frontend/src/types/cricket.ts`) to match backend schemas in the same task.
+3. **Shared File Edit Sequence**:
+   - Edit shared registration files last: `backend/app/api/deps.py`, `backend/app/routers/api.py`, `frontend/src/app/router/index.tsx`, `frontend/src/components/Navbar.tsx`.
+   - Never add duplicate API clients: all HTTP traffic flows exclusively through `frontend/src/lib/api-client.ts`.
+
+---
+
+## 6. Safety Limits (Mechanically Enforced by Hook)
+
+The `.agents/hooks.json` configuration mechanically blocks destructive commands via `pre_command_safety.py`. Never attempt to:
+- Reset the database or drop tables outside test fixtures.
+- Execute `git push --force` or `git reset --hard`.
+- Delete files outside the designated task scope.
+- Install unapproved third-party packages or edit `requirements.txt` / `package.json`.
+- Modify Dockerfiles or Kubernetes manifests without explicit instruction.
+- Touch or reveal secrets or credentials.
+
+---
+
+## 7. Quality Gate & Test Verification Commands
+
+Run these commands to verify your changes:
+
+```powershell
+# Automated Pre-Flight Quality Gate (Runs all checks across both workspaces):
+python .agents/skills/agentic-engineering/scripts/audit_gate.py --full
+
+# Backend Tests (185 tests in in-memory SQLite):
+cd backend
+..\.venv\Scripts\pytest.exe
+
+# Frontend Checks (Lint, 131 tests, TypeScript build):
+cd frontend
+npm run lint
+npm test -- --run
+npm run build
 ```
 
-## Commands
-- Run Automated Quality Gate: `python .agents/skills/agentic-engineering/scripts/audit_gate.py --full`
-- Backend Tests: `pytest` inside `backend/`
-- Frontend Checks: `npm run lint`, `npm test`, `npm run build` inside `frontend/`
+---
 
-## Safety Limits (Enforced by Hook)
-- Never run: database reset, `git push --force`, `git reset --hard`, deleting files outside the task,
-  installing packages, changing Docker/k8s files, touching secrets.
-- Enforced mechanically by `.agents/hooks.json` via `pre_command_safety.py`.
+## 8. Documentation Sitemap
 
-## Where things are
-| Need | Location |
+| Category | Topics & Key Documents |
 |---|---|
-| Workflow Skill & Router | `.agents/skills/agentic-engineering/SKILL.md` |
-| Sized Processes (Small / Med / Large) | `.agents/skills/agentic-engineering/references/processes/` |
-| Checklists (Start / Diff / Finish / Safety) | `.agents/skills/agentic-engineering/references/checklists/` |
-| Templates (Task brief, plan, review report) | `.agents/skills/agentic-engineering/resources/templates/` |
-| Automation Scripts (Audit gate, Diff inspector) | `.agents/skills/agentic-engineering/scripts/` |
-| Cricket domain rules | `docs/domain/cricket-rules.md` |
-| Architecture decisions (ADRs) | `docs/decisions/` |
-| Known problems & tech debt | `backend/docs/known-problems.md`, `frontend/docs/known-problems.md` |
-| Session notes & handoffs | `docs/notes/` |
-| Worked examples | `docs/examples/` |
+| **Product & Scope** | [`docs/product/overview.md`](docs/product/overview.md) • [`docs/product/requirements.md`](docs/product/requirements.md) |
+| **System Architecture** | [`docs/architecture/system-overview.md`](docs/architecture/system-overview.md) • [`docs/decisions/`](docs/decisions) |
+| **Domain & Cricket Rules** | [`docs/domain/domain-model.md`](docs/domain/domain-model.md) • [`docs/domain/cricket-rules.md`](docs/domain/cricket-rules.md) |
+| **Contracts & APIs** | [`docs/contracts/interface-contracts.md`](docs/contracts/interface-contracts.md) |
+| **Development Guides** | [`docs/development/development-workflow.md`](docs/development/development-workflow.md) • [`docs/development/feature-development.md`](docs/development/feature-development.md) • [`docs/development/bug-fixing.md`](docs/development/bug-fixing.md) • [`docs/development/refactoring.md`](docs/development/refactoring.md) • [`docs/development/commit-guidelines.md`](docs/development/commit-guidelines.md) • [`docs/development/code-review-and-completion.md`](docs/development/code-review-and-completion.md) |
+| **Testing Strategy** | [`docs/testing/testing-strategy.md`](docs/testing/testing-strategy.md) • [`docs/testing/requirements-to-tests.md`](docs/testing/requirements-to-tests.md) • [`docs/testing/quality-gates.md`](docs/testing/quality-gates.md) |
+| **Deployment & Infra** | [`docs/deployment/deployment-guide.md`](docs/deployment/deployment-guide.md) |
+| **Known Tech Debt** | [`backend/docs/known-problems.md`](backend/docs/known-problems.md) • [`frontend/docs/known-problems.md`](frontend/docs/known-problems.md) |
+| **Worked Examples** | [`docs/examples/worked-examples.md`](docs/examples/worked-examples.md) |

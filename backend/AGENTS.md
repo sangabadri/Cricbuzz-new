@@ -1,78 +1,108 @@
-# Backend rules
+# Backend Agent Rules & Architecture Instructions
 
-Python 3.11, FastAPI, async SQLAlchemy, PostgreSQL, Pydantic v2, pytest.
-Read `/AGENTS.md` first. This file adds the backend rules.
+- **Runtime & Frameworks**: Python 3.11, FastAPI, async SQLAlchemy 2.0, PostgreSQL, Pydantic v2, pytest.
+- **Entry Point**: Read the root [`/AGENTS.md`](../AGENTS.md) first. This document extends global rules with backend-specific constraints.
 
-## Layers (calls go down only)
+---
+
+## 1. Clean Architecture Layers & Flow Direction
+
+Calls must strictly flow downward. Reverse dependencies are prohibited:
+
+```text
+routers  -->  services  -->  repositories  -->  models
+                  |
+                  v
+                domain   (pure cricket laws, zero framework dependencies)
+
+schemas = request / response contracts        api/deps.py = dependency injection wiring
 ```
-routers  ->  services  ->  repositories  ->  models
-                 |
-                 v
-              domain   (pure cricket rules)
-schemas = request / response shapes      api/deps.py = builds services per request
-```
-| Layer | Does | Never does |
+
+| Layer | Responsibility | Strict Prohibitions |
 |---|---|---|
-| `routers/` | Read the request, call ONE service method, return the result | Rules, database calls, loops over data |
-| `services/` | Business flow and rules, raises domain errors | Import FastAPI / HTTPException, write SQL |
-| `repositories/` | Database queries (`select`, `add`, `flush`) | Business rules, commit, raise HTTP errors |
-| `domain/` | Pure cricket rules and state | Import fastapi, sqlalchemy or pydantic (a test checks this) |
-| `models/` | Table definitions | Logic |
-| `schemas/` | Pydantic request and response shapes | Logic, database access |
-| `api/deps.py` | Wire repositories into services | Rules |
+| `routers/` | Read request, call **one** service method, return response. | No business rules, no direct DB/SQL queries, no loops over models. |
+| `services/` | Business flow, validation checks, transaction orchestration. | No FastAPI/HTTP imports, no raw SQL, no status codes. |
+| `repositories/` | Database queries (`select`, `add`, `flush`). | No business rules, no `session.commit()`, no HTTP exceptions. |
+| `domain/` | Pure cricket rules, crease state, innings progression. | **Zero imports** of `fastapi`, `sqlalchemy`, or `pydantic` (enforced by test). |
+| `models/` | Declarative SQLAlchemy table definitions & constraints. | No business logic, no JSON serialization logic. |
+| `schemas/` | Pydantic v2 validation and serialization schemas. | No database access, no business rules. |
+| `api/deps.py` | FastAPI `Depends()` wiring of repositories into services. | No authorization logic, no SQL queries, no domain decisions. |
 
-Details and code patterns: `docs/layers-and-rules.md`, `docs/code-patterns.md`.
+Detailed guide: [`backend/docs/architecture/components-and-responsibilities.md`](docs/architecture/components-and-responsibilities.md).
 
-## Naming (one pattern, copy it)
-- One file per thing, singular, in each layer: `team.py`, `squad.py`, `delivery.py`.
-- Classes: `TeamService`, `TeamRepository`, `Team` (model).
-- Schemas: `TeamCreate` (input), `TeamUpdate` (change), `TeamResponse` (output).
-- Functions: verbs, plain English: `create_squad`, `get_by_match_and_team`, `undo_last_delivery`.
-- Errors: end with `Error`. Tests: `test_<what_should_happen>`.
-- Use simple, clear words. Prefer `player_id` to clever abbreviations.
+---
 
-## Size limits
-- Function: aim for 40 lines. Over 80 is a problem.
-- File: aim for 300 lines.
-- **Do not make an existing long function longer.** Several are already too long
-  (`docs/known-problems.md`). If your task must change one, first propose extracting small helper
-  methods, as a separate step with tests passing before and after.
+## 2. Strict Invariants for Backend Coding Agents
 
-## Errors
-Raise errors from `app/domain/exceptions.py`. Add a new error type only when needed, and add it to
-`DOMAIN_EXCEPTION_STATUS_MAP` in `app/main.py` with a test. Messages must make sense to a person.
+1. **Scoring Row-Locking Order (ADR-0003)**:
+   Any method that mutates match or innings state must acquire row-level locks (`for_update=True`) in this exact sequence:
+   ```python
+   match = await self.match_repo.get_by_id(match_id, for_update=True)       # 1st
+   innings = await self.innings_repo.get_by_id(innings_id, for_update=True) # 2nd
+   ```
+   Inverting this order causes deadlocks under concurrent requests and is prohibited.
 
-## Database
-- All database code is `async` / `await`.
-- Repositories use `flush`. Only `get_db()` commits (one transaction per request).
-- Methods that change match or innings state lock rows in the order **match, then innings** (`for_update=True`).
-- A new table or column is Stop-and-ask. `create_all` does not alter existing tables.
+2. **One Transaction per Request (ADR-0002)**:
+   - Database operations use async SQLAlchemy (`AsyncSession`).
+   - Repositories call `await session.flush()`.
+   - Only `get_db()` in `app/database.py` commits or rolls back the transaction.
 
-## Tests (`docs/testing.md`)
-- Every line of "How we know it works" has a test.
-- Rules: unit test in `tests/unit/` (mock repositories). Whole request path: `tests/e2e/`.
-- Write at least one test for a case that should be rejected, not only the happy path.
-- Never edit or delete a test to make it pass. If a test looks wrong, report it.
+3. **Domain Exception Handling (ADR-0004)**:
+   - Services raise pure exceptions from `app/domain/exceptions.py`.
+   - Never raise `HTTPException` inside services or repositories.
+   - Status codes are mapped centrally in `DOMAIN_EXCEPTION_STATUS_MAP` in `app/main.py`.
 
-## Do not
-- Expand auth/permissions or replicate patterns from deps.py without an approved design (decision 0005).
-- Put rules in routers. Put database calls in services.
-- Add a new layer, base class, interface or manager "for the future".
-- Add a library without approval.
-- Change an API path, field name or status code without approval (the frontend depends on it).
+4. **Match Authorization (ADR-0007)**:
+   - Canonical match ownership lives solely in `match_access` with `role = MatchUserRole.OWNER`.
+   - Verify permissions via `MatchAccessService.authorize_match_access()`. Never place ad-hoc SQL in `deps.py`.
 
-## Adding something new
-Follow `docs/adding-a-feature.md`. Good models to copy:
-| For | Copy from |
+---
+
+## 3. Size Limits & Refactoring Guardrails
+
+- **Functions**: Target 40 lines. Exceeding 80 lines is a defect.
+- **Files**: Target 300 lines.
+- **Do not lengthen existing long functions**: If modifying a method listed in [`backend/docs/known-problems.md`](docs/known-problems.md), propose extracting private helper methods as a dedicated refactoring step with tests passing before and after.
+
+---
+
+## 4. Backend Naming Conventions
+
+| Entity | Pattern | Example |
+|---|---|---|
+| Modules (one per thing) | `singular.py` | `team.py`, `delivery.py`, `squad.py` |
+| Classes | PascalCase | `TeamService`, `DeliveryRepository`, `Innings` |
+| Schemas | `XCreate`, `XUpdate`, `XResponse` | `MatchCreate`, `DeliveryUpdate`, `ScorecardResponse` |
+| Functions | Verb phrase in snake_case | `create_squad`, `undo_last_delivery`, `get_by_id` |
+| Exceptions | Ends with `Error` | `CreaseViolationError`, `EntityNotFoundError` |
+| Tests | `test_<what_should_happen>` | `test_striker_advances_on_odd_runs` |
+
+---
+
+## 5. Backend Documentation Index
+
+| Documentation Area | File Link |
 |---|---|
-| Router | `app/routers/deliveries.py`, `app/routers/teams.py` |
-| Service | `app/services/squad.py` |
-| Repository | `app/repositories/squad.py` |
-| Schema | `app/schemas/squad.py` |
-| Pure rules | `app/domain/crease.py` |
-| Wiring | `app/api/deps.py` |
-| Layer test | `tests/unit/test_architecture.py` |
-| Service unit test | `tests/unit/test_squad_service.py` |
-| Request-path test | `tests/e2e/test_match_lifecycle_e2e.py` |
+| **Backend Architecture Overview** | [`backend/docs/architecture/overview.md`](docs/architecture/overview.md) |
+| **Components & Responsibilities** | [`backend/docs/architecture/components-and-responsibilities.md`](docs/architecture/components-and-responsibilities.md) |
+| **Request Lifecycle** | [`backend/docs/architecture/request-lifecycle.md`](docs/architecture/request-lifecycle.md) |
+| **Domain Implementation** | [`backend/docs/domain/domain-implementation.md`](docs/domain/domain-implementation.md) |
+| **Database Schema & Models** | [`backend/docs/database/schema-and-relationships.md`](docs/database/schema-and-relationships.md) |
+| **Transactions & Concurrency** | [`backend/docs/database/transactions-and-consistency.md`](docs/database/transactions-and-consistency.md) |
+| **API Design & Errors** | [`backend/docs/api/api-design-and-error-handling.md`](docs/api/api-design-and-error-handling.md) |
+| **Coding Conventions** | [`backend/docs/development/coding-conventions.md`](docs/development/coding-conventions.md) |
+| **Implementation Guidelines** | [`backend/docs/development/implementation-guidelines.md`](docs/development/implementation-guidelines.md) |
+| **Backend Testing Strategy** | [`backend/docs/testing/testing-strategy.md`](docs/testing/testing-strategy.md) |
+| **Functional & Edge Testing** | [`backend/docs/testing/functional-and-edge-cases.md`](docs/testing/functional-and-edge-cases.md) |
+| **Failure & Integration Testing**| [`backend/docs/testing/failure-and-integration-testing.md`](docs/testing/failure-and-integration-testing.md) |
+| **Technical Debt & Known Debt** | [`backend/docs/known-problems.md`](docs/known-problems.md) |
 
-Run: `pytest` inside `backend/`.
+---
+
+## 6. Verification Command
+Always run tests from the `backend/` directory:
+```powershell
+cd backend
+..\.venv\Scripts\pytest.exe
+```
+Result must be 100% green (185 tests passing).
