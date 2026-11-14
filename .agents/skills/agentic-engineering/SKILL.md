@@ -39,6 +39,20 @@ Check project architecture rules in `docs/decisions/`:
 - Backend: `app/domain/` has zero framework/ORM dependencies ([ADR-0001](../../../docs/decisions/0001-backend-layers.md)).
 - Frontend: `components/ui/` never imports `features/` or `pages/` ([ADR-0006](../../../docs/decisions/0006-frontend-structure.md)).
 
+### Deprecation & Deletion Protocol (Tombstone Hygiene)
+Whenever a database table, ORM model, router, role, or feature component is deleted or superseded:
+1. Identify the deleted entity's identifier/stem (e.g. `match_access`, `MatchUserRole`).
+2. Run global grep across the repository before committing:
+   ```bash
+   git grep -i "<deleted_identifier>"
+   ```
+3. Update or purge all lingering references in:
+   - Architecture diagrams & overviews (`docs/architecture/system-overview.md`)
+   - Schema ERDs (`backend/docs/database/schema-and-relationships.md`)
+   - Product requirements & personas (`docs/product/overview.md`, `docs/product/requirements.md`)
+   - Test traceability matrices (`docs/testing/requirements-to-tests.md`, `backend/docs/testing/testing-strategy.md`)
+4. Verify `diff_inspector.py --check` passes the automated Entity Tombstone Guard.
+
 ## Phase 4: Quality Gate Audit
 Run the automated gate before diff review:
 ```bash

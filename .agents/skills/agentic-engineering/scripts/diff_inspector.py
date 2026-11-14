@@ -36,6 +36,7 @@ CODE_TO_DOC_MAPPINGS = [
         "docs": (
             "backend/docs/database/schema-and-relationships.md",
             "docs/domain/domain-model.md",
+            "docs/architecture/system-overview.md",
         ),
         "description": "SQLAlchemy models, relations, foreign keys, and indexes",
     },
@@ -64,6 +65,8 @@ CODE_TO_DOC_MAPPINGS = [
             "docs/decisions/0005-no-auth.md",
             "docs/decisions/0007-match-access-single-source-of-truth.md",
             "docs/decisions/0008-single-owner-match-model.md",
+            "docs/product/overview.md",
+            "docs/architecture/system-overview.md",
         ),
         "description": "Public spectator access, session tokens, and match access permissions",
     },
@@ -145,6 +148,79 @@ def check_doc_synchronization(files: list[str]) -> bool:
         return False
 
     print("\n[DOC SYNC: STATUS] All touched architectural components have synchronized documentation.")
+    return True
+
+
+def check_entity_tombstones(prefer_staged: bool = False) -> bool:
+    """
+    Tombstone Guard: Detects deleted production entities (models, services, routers, components)
+    and verifies that references to the deleted entity are completely purged from
+    active documentation, architecture diagrams, and test matrices.
+    """
+    print("\n=== ENTITY TOMBSTONE GUARD ===")
+    if prefer_staged:
+        deleted_raw = run_cmd(["git", "diff", "--cached", "--diff-filter=D", "--name-only"])
+    else:
+        status_raw = run_cmd(["git", "status", "--short"])
+        if not status_raw:
+            deleted_raw = run_cmd(["git", "diff", "--diff-filter=D", "--name-only", "HEAD~1", "HEAD"])
+        else:
+            deleted_raw = run_cmd(["git", "diff", "--diff-filter=D", "--name-only", "HEAD"])
+
+    deleted_files = [f.strip().replace("\\", "/") for f in deleted_raw.splitlines() if f.strip()]
+
+    # Filter for production entity deletions
+    prod_prefixes = (
+        "backend/app/models/",
+        "backend/app/services/",
+        "backend/app/repositories/",
+        "backend/app/routers/",
+        "frontend/src/features/",
+        "frontend/src/components/",
+    )
+    generic_names = {"__init__", "base", "deps", "index", "types", "api", "utils", "common"}
+    tombstone_keywords = {"eliminated", "removed", "retired", "superseded", "deleted", "deprecated"}
+
+    stems_to_check = set()
+    for f in deleted_files:
+        if any(f.startswith(p) for p in prod_prefixes):
+            stem = Path(f).stem
+            if stem and stem.lower() not in generic_names:
+                stems_to_check.add((stem, f))
+
+    if not stems_to_check:
+        print("[TOMBSTONE: OK] No deleted production entities detected.")
+        return True
+
+    violations = []
+    for stem, origin_file in stems_to_check:
+        grep_res = run_cmd(["git", "grep", "-n", "-i", stem, "--", "docs/", "backend/docs/", "frontend/docs/"])
+        if not grep_res:
+            continue
+        for line in grep_res.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split(":", 2)
+            if len(parts) < 3:
+                continue
+            fpath, lineno, text = parts[0], parts[1], parts[2]
+            fpath_norm = fpath.replace("\\", "/")
+            if fpath_norm.startswith("docs/decisions/") or fpath_norm == "backend/docs/known-problems.md":
+                continue
+            if any(kw in text.lower() for kw in tombstone_keywords):
+                continue
+            violations.append((stem, origin_file, fpath_norm, lineno, text.strip()))
+
+    if violations:
+        print("\n[TOMBSTONE: ALERT] Deleted entity references still lingering in active documentation:")
+        for stem, origin_file, fpath, lineno, text in violations:
+            print(f"  * Entity '{stem}' (deleted in {origin_file}):")
+            print(f"    - {fpath}:{lineno}: {text}")
+        print("\nFix: Purge lingering references from architecture overviews, ERDs, and test matrices, or mark explicitly as eliminated/deprecated.")
+        return False
+
+    print(f"[TOMBSTONE: OK] All {len(stems_to_check)} deleted entity tombstones verified clean across documentation.")
     return True
 
 
@@ -231,13 +307,14 @@ def main():
         for f, lines in oversized:
             print(f"  - {f}: {lines} lines (aim for < 150 for components, < 300 for files)")
 
-    # Run Documentation Synchronization Guard
+    # Run Documentation Synchronization Guard & Entity Tombstone Guard
     is_synced = check_doc_synchronization(files)
+    is_tombstone_clean = check_entity_tombstones(prefer_staged=args.staged)
 
     print("---------------------------------------------")
 
-    if args.check and not is_synced:
-        print("[ERROR] Doc Sync Guard failed. Required documentation updates missing.")
+    if args.check and (not is_synced or not is_tombstone_clean):
+        print("[ERROR] Quality & Doc Sync Guard failed. Resolve alerts before commit.")
         sys.exit(1)
 
 

@@ -22,5 +22,6 @@ Work is done only when all are true.
 ## Knowledge
 - [ ] Docs updated if behaviour or rules changed.
 - [ ] Decision record written if a real design choice was made.
+- [ ] Tombstone Hygiene: If any entity/model/table was deleted or superseded, a repository-wide search (`git grep -i <entity>`) was executed to purge orphan references from active documentation.
 - [ ] Known limits and skipped work written in the report.
 - [ ] Session notes written if work continues later.

@@ -130,6 +130,18 @@ def test_doc_sync_guard_alerts():
     print("  [PASS] Passed when code and mapped documentation are synchronized together")
 
 
+def test_entity_tombstone_guard():
+    print("\n--- 5. Testing Entity Tombstone Guard ---")
+    if str(SCRIPTS_DIR) not in sys.path:
+        sys.path.insert(0, str(SCRIPTS_DIR))
+    import diff_inspector as di
+
+    # Current clean state: No uncommitted deleted entities -> PASS
+    tombstone_clean = di.check_entity_tombstones()
+    assert tombstone_clean is True, "Tombstone guard should pass on clean repository state"
+    print("  [PASS] Passed on clean state with zero lingering orphan entity references")
+
+
 def main():
     print("==================================================")
     print(" CRICBUZZ AGENT & PIPELINE VERIFICATION SUITE   ")
@@ -138,6 +150,7 @@ def main():
     test_pre_commit_gate()
     test_stop_doc_guard()
     test_doc_sync_guard_alerts()
+    test_entity_tombstone_guard()
     print("\n==================================================")
     print(" ALL AGENT & PIPELINE HARNESS CHECKS PASSED [OK]  ")
     print("==================================================")
