@@ -66,6 +66,6 @@ Measured on 2026-11-12 at commit `225e432`.
 - `SquadService._enrich_player_details` sets attributes on model objects with `setattr`. Works, but a response schema built for it would be clearer and type-safe.
 - Comments in `SquadService.create_squad` number two steps "6". Cosmetic.
 - `JWT_SECRET_KEY` in `config.py` defaults to a hardcoded string. Must require an environment variable in production.
-- `CORS_ORIGINS` in `config.py` uses hardcoded localhost origins.
+- [RESOLVED - 2026-11-14] `CORS_ORIGINS` in `config.py` uses hardcoded localhost origins: Resolved by adding dynamic Pydantic validator supporting JSON array strings, comma-separated environment variables, and fallback dev origins.
 - `sync` test helper exists in multiple test modules. Centralize in `conftest.py`.
 - `main.py` imports all models by name just so tables get created on startup (`Base.metadata.create_all`). Alembic migrations should replace automatic `create_all`.
