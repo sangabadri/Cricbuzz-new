@@ -52,9 +52,9 @@ Detailed guide: [`backend/docs/architecture/components-and-responsibilities.md`]
    - Never raise `HTTPException` inside services or repositories.
    - Status codes are mapped centrally in `DOMAIN_EXCEPTION_STATUS_MAP` in `app/main.py`.
 
-4. **Match Authorization (ADR-0007)**:
-   - Canonical match ownership lives solely in `match_access` with `role = MatchUserRole.OWNER`.
-   - Verify permissions via `MatchAccessService.authorize_match_access()`. Never place ad-hoc SQL in `deps.py`.
+4. **Match Authorization (ADR-0008)**:
+   - Canonical match ownership lives directly in `matches.owner_id`.
+   - Verify permissions via `require_match_owner` in `app/api/deps.py`. A match belongs to exactly one user; there are no shared match roles or delegation. Unassigned matches (`owner_id is None`) permit open demo access.
 
 ---
 

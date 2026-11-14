@@ -55,31 +55,24 @@ This document details the PostgreSQL relational database schema, tables, foreign
 
 ---
 
-### B. Match & Match Access Tables
+### B. Match Ownership (ADR-0008 Single-Owner Model)
 
 #### `matches`
 - `id` (INTEGER, Primary Key, Auto-increment)
-- `team_a_id` (INTEGER, ForeignKey(`teams.id`))
-- `team_b_id` (INTEGER, ForeignKey(`teams.id`))
+- `owner_id` (INTEGER, ForeignKey(`users.id`, ondelete="SET NULL"), Indexed, Nullable)
+- `team_a` (INTEGER, ForeignKey(`teams.id`))
+- `team_b` (INTEGER, ForeignKey(`teams.id`))
 - `format` (VARCHAR, Enum `MatchFormat`: `t20`, `odi`)
 - `status` (VARCHAR, Enum `MatchStatus`: `scheduled`, `toss_done`, `live`, `innings_break`, `completed`, `abandoned`)
 - `venue` (VARCHAR, Not Null)
-- `date_time` (TIMESTAMP WITH TIME ZONE)
-- `overs_limit` (INTEGER)
-- `toss_winner_id` (INTEGER, ForeignKey(`teams.id`), Nullable)
+- `match_date` (TIMESTAMP WITH TIME ZONE)
+- `toss_winner` (INTEGER, ForeignKey(`teams.id`), Nullable)
 - `toss_decision` (VARCHAR, Enum `TossDecision`, Nullable)
-- `winner_id` (INTEGER, ForeignKey(`teams.id`), Nullable)
-- `result_margin` (INTEGER, Nullable)
-- `result_margin_type` (VARCHAR, Nullable)
-- `current_innings_id` (INTEGER, Nullable)
-- *Note*: Per ADR-0007, `matches` contains no `created_by` column.
-
-#### `match_access` (ADR-0007 Canonical Ownership)
-- `id` (INTEGER, Primary Key, Auto-increment)
-- `match_id` (INTEGER, ForeignKey(`matches.id`, ondelete="CASCADE"), Indexed)
-- `user_id` (INTEGER, ForeignKey(`users.id`, ondelete="CASCADE"), Indexed)
-- `role` (VARCHAR, Enum `MatchUserRole`: `owner`, `scorer`, `viewer`)
-- Unique constraint: `(match_id, user_id)`.
+- `winner` (INTEGER, ForeignKey(`teams.id`), Nullable)
+- `win_margin_runs` (INTEGER, Nullable)
+- `win_margin_wickets` (INTEGER, Nullable)
+- `mom` (INTEGER, ForeignKey(`players.id`), Nullable)
+- *Note*: Per ADR-0008, `owner_id` directly designates the sole match owner. The `match_access` table and multi-user roles have been completely eliminated.
 
 ---
 

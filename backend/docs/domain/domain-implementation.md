@@ -11,7 +11,7 @@ The domain package contains pure Python business logic:
 ```text
 backend/app/domain/
 ├── __init__.py
-├── enums.py                # MatchFormat, MatchStatus, WicketType, ExtraType, Role
+├── enums.py                # MatchFormat, MatchStatus, WicketType, ExtraType, Role, Batting/Bowling styles
 ├── exceptions.py           # CricketDomainError hierarchy (zero HTTP knowledge)
 ├── crease.py               # CreaseState: batting crease state machine
 ├── innings_aggregate.py    # InningsAggregate: ball-by-ball score and over progression
@@ -20,7 +20,7 @@ backend/app/domain/
     └── formats.py          # MatchFormatRules, T20FormatRules, ODIFormatRules
 ```
 
-**Constraint (ADR-0001)**: The domain layer has zero knowledge of databases, web frameworks, or serialization libraries. AST inspection in `tests/unit/test_architecture.py` continuously enforces this.
+**Constraint (ADR-0001)**: The domain layer has zero knowledge of databases, web frameworks, or serialization libraries. AST inspection in `tests/unit/test_architecture.py` continuously enforces this. In accordance with ADR-0001 and ADR-0008 (Single-Owner Match Model), authentication concepts, access control lists, and match roles are strictly forbidden in `backend/app/domain/enums.py`.
 
 ---
 

@@ -78,12 +78,12 @@ This document defines the functional and non-functional requirements for Cricbuz
 - **FR-7.5**: Token reuse attack detection: Replaying a revoked refresh token immediately invalidates all active sessions for that user.
 - **FR-7.6**: Logging out invalidates the session in the database and clears the browser cookie.
 
-### FR-8: Match Authorization & Multi-Scorer Access
-- **FR-8.1**: Match ownership resides canonically in `match_access` table with `role = owner`.
-- **FR-8.2**: Match owners can grant `scorer` or `viewer` roles to other registered users.
-- **FR-8.3**: Only users with `owner` or `scorer` roles (or superusers) are authorized to submit squads, start innings, or record deliveries.
-- **FR-8.4**: Unassigned/legacy matches (no entries in `match_access`) permit open access for testing/demo compatibility.
-- **FR-8.5**: Spectator read-only endpoints (`GET /matches`, `GET /matches/{id}`, `GET /matches/{id}/scorecard`) are completely unauthenticated.
+### FR-8: Single-Owner Match Authorization
+- **FR-8.1**: Match ownership resides canonically on `matches.owner_id` (ADR-0008). A match belongs to exactly one user; there are no shared roles or multi-user access grants.
+- **FR-8.2**: Only the match owner (or active superusers) is authorized to submit squads, conduct toss, start innings, record deliveries, abandon, or award Player of the Match.
+- **FR-8.3**: Attempting to mutate a protected match without authorization yields `403 Forbidden` (or `401 Unauthorized` if unauthenticated).
+- **FR-8.4**: Unassigned/demo matches (`owner_id is None`) permit open access for testing, historical fixture, and demo seed compatibility.
+- **FR-8.5**: Spectator read-only endpoints (`GET /matches`, `GET /matches/{id}`, `GET /matches/{id}/scorecard`) remain completely unauthenticated (ADR-0005).
 
 ---
 

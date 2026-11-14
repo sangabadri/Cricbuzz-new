@@ -1,8 +1,6 @@
 import axios from 'axios';
 import type {
   LoginCredentials,
-  MatchAccess,
-  MatchUserRole,
   RegisterCredentials,
   TokenResponse,
   User,
@@ -355,19 +353,5 @@ export const cricketApi = {
   getCurrentUser: async (): Promise<User> => {
     const res = await api.get<User>('/auth/me');
     return res.data;
-  },
-
-  getMatchAccess: async (matchId: number): Promise<MatchAccess[]> => {
-    const res = await api.get<MatchAccess[]>(`/matches/${matchId}/access`);
-    return res.data;
-  },
-
-  grantMatchAccess: async (matchId: number, username: string, role: MatchUserRole = 'scorer'): Promise<MatchAccess> => {
-    const res = await api.post<MatchAccess>(`/matches/${matchId}/access`, { username, role });
-    return res.data;
-  },
-
-  revokeMatchAccess: async (matchId: number, userId: number): Promise<void> => {
-    await api.delete(`/matches/${matchId}/access/${userId}`);
   },
 };

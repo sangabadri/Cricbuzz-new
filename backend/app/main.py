@@ -23,7 +23,6 @@ from app.models.squad import Squad, SquadPlayer
 from app.models.innings import Innings
 from app.models.delivery import Delivery
 from app.models.user import User
-from app.models.match_access import MatchAccess
 from app.models.refresh_token import RefreshToken
 from app.routers.api import api_router
 

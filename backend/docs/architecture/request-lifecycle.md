@@ -18,7 +18,7 @@ This document traces the complete execution lifecycle of an HTTP request through
 [ FastAPI Dependency Injection (api/deps.py) ]
             |
             | 3. get_db() opens AsyncSession (begins transaction)
-            | 4. require_match_access resolves auth context (MatchAccessService)
+            | 4. require_match_owner verifies ownership against match.owner_id
             | 5. get_delivery_service instantiates repos & service
             v
 [ Router Handler (routers/deliveries.py) ]
@@ -68,7 +68,7 @@ This document traces the complete execution lifecycle of an HTTP request through
 
 ### Phase 3: Dependency Resolution & Transaction Setup
 1. `get_db()` yields an `AsyncSession`. A single database transaction is initiated.
-2. For protected routes, `require_match_access` parses the match parameter and verifies user role in `match_access`.
+2. For protected routes, `require_match_owner` parses the match parameter and verifies ownership against `matches.owner_id` (ADR-0008).
 3. `get_*_service` instantiates repositories using the active `AsyncSession` and injects them into the service constructor.
 
 ### Phase 4: Business Flow & Row Locking

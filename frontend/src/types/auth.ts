@@ -1,5 +1,3 @@
-export type MatchUserRole = 'owner' | 'scorer' | 'viewer';
-
 export interface User {
   id: number;
   username: string;
@@ -26,12 +24,4 @@ export interface RegisterCredentials {
   username: string;
   email: string;
   password: string;
-}
-
-export interface MatchAccess {
-  user_id: number;
-  username: string;
-  role: MatchUserRole;
-  granted_by?: number;
-  created_at?: string;
 }

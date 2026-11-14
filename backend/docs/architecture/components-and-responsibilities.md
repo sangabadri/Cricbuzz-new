@@ -48,7 +48,7 @@ This document defines the exact responsibilities, boundaries, and import constra
 - Coordinates between repositories, domain aggregates, and database transactions.
 - Enforces deterministic row locking (`for_update=True`, ADR-0003: Match locked first, then Innings).
 - Enforces entity lifecycle guards (e.g. `InningsService` rejecting innings creation on completed/abandoned matches or exceeding format limits).
-- Enforces access boundaries (e.g. `MatchAccessService` safeguarding sole match ownership against demotion or revocation).
+- Enforces single-owner match boundaries (ADR-0008: matches belong directly to an individual owner via `matches.owner_id`, eliminating multi-role delegation complexity).
 - Employs focused single-responsibility projection and orchestration helpers:
   - `ScorecardService` decomposes scorecard assembly into `_build_batting_scorecards`, `_build_bowling_scorecards`, `_build_fall_of_wickets`, and `_build_partnerships`, and live ticker projection into `_build_current_over_balls`, `_project_live_batter`, `_project_live_bowler`, and `_calculate_chase_status` with zero N+1 database queries.
   - `DeliveryService` decomposes ball recording and retroactive PATCH updates into `_resolve_delivery_participants`, `_resolve_patch_fields`, `_build_simulated_deliveries`, and unified match lifecycle synchronization `_sync_match_completion_status`.
@@ -67,3 +67,4 @@ This document defines the exact responsibilities, boundaries, and import constra
 - Provides reusable FastAPI `Depends()` factories.
 - Instantiates repository instances from the active session (`get_*_repo`).
 - Wires repositories into service constructors (`get_*_service`).
+- Enforces match mutation authorization via `require_match_owner`, verifying that `current_user.id == match.owner_id` (or superuser / unassigned match) before permitting any match, squad, innings, or delivery mutation.

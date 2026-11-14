@@ -53,8 +53,8 @@ frontend/src/
 | **Backend Response Type** | `types/` | Matches Pydantic schemas in `backend/app/schemas/` exactly. |
 
 ### Scorer Console & State Hooks (`src/features/scoring/`, `src/hooks/`)
-- `ScorerConsolePage`: Orchestrates the console workspace, loads state, and hosts modal dialogs (< 250 lines).
-- `ScorerHeader`: Displays breadcrumbs, innings selector, access modal trigger, and Match Center shortcut.
+- `ScorerConsolePage`: Orchestrates the console workspace, loads state, and hosts modal dialogs (< 250 lines). Single-owner match authorization ensures only the match creator or superuser can access and score.
+- `ScorerHeader`: Displays breadcrumbs, innings selector, and Match Center shortcut (match access modal retired per ADR-0008).
 - `MatchCompletedBanner`: Displays winner details and Man of the Match nomination form.
 - `InningsTransitionPrompts`: Shows innings break targets or opening batter setup prompts.
 - `useScorerKeyboardShortcuts`: Manages non-intrusive physical key bindings for ball recording and wicket triggers.

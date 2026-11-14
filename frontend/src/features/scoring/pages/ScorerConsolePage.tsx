@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AlertCircle, RotateCcw } from 'lucide-react';
@@ -10,7 +10,6 @@ import { WicketModal } from '../../../components/scorer/modals/WicketModal';
 import { BowlerModal } from '../../../components/scorer/modals/BowlerModal';
 import { IncomingBatterModal } from '../../../components/scorer/modals/IncomingBatterModal';
 import { StartInningsModal } from '../../../components/scorer/modals/StartInningsModal';
-import { MatchAccessModal } from '../../authentication/components/MatchAccessModal';
 import { CommentaryFeed } from '../../matches/components/CommentaryFeed';
 import { Button } from '../../../components/ui/Button';
 import { ScorerHeader } from '../components/ScorerHeader';
@@ -21,8 +20,6 @@ import { useScorerKeyboardShortcuts } from '../hooks/useScorerKeyboardShortcuts'
 export const ScorerConsolePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const matchId = Number(id);
-
-  const [showAccessModal, setShowAccessModal] = useState(false);
 
   const {
     inningsNumber, setInningsNumber, match, scorerState, liveTicker,
@@ -103,7 +100,6 @@ export const ScorerConsolePage: React.FC = () => {
         matchId={matchId}
         inningsNumber={inningsNumber}
         onSelectInnings={(inn) => setInningsNumber(inn)}
-        onOpenAccessModal={() => setShowAccessModal(true)}
       />
 
       {scorerState?.match_status === 'completed' && (
@@ -209,12 +205,6 @@ export const ScorerConsolePage: React.FC = () => {
         battingSquad={battingSquad}
         bowlingSquad={bowlingSquad}
         isPending={isStartingInnings}
-      />
-
-      <MatchAccessModal
-        matchId={matchId}
-        isOpen={showAccessModal}
-        onClose={() => setShowAccessModal(false)}
       />
     </div>
   );

@@ -1,20 +1,18 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight, PlayCircle, Shield } from 'lucide-react';
+import { ChevronRight, PlayCircle } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 
 interface ScorerHeaderProps {
   matchId: number;
   inningsNumber: number;
   onSelectInnings: (inn: number) => void;
-  onOpenAccessModal: () => void;
 }
 
 export const ScorerHeader: React.FC<ScorerHeaderProps> = ({
   matchId,
   inningsNumber,
   onSelectInnings,
-  onOpenAccessModal,
 }) => {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#21262d]">
@@ -53,15 +51,6 @@ export const ScorerHeader: React.FC<ScorerHeaderProps> = ({
             Innings 2
           </button>
         </div>
-
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={onOpenAccessModal}
-          leftIcon={<Shield className="w-3.5 h-3.5 text-amber-400" />}
-        >
-          Access
-        </Button>
 
         <Link to={`/matches/${matchId}`}>
           <Button variant="secondary" size="sm" leftIcon={<PlayCircle className="w-3.5 h-3.5 text-sky-400" />}>

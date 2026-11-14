@@ -1,7 +1,10 @@
 # 0007: Canonical Match Ownership in MatchAccess (Single Source of Truth)
 
-- Status: Accepted
-- Date: 2026-11-13
+- Status: Superseded by ADR-0008 (Single-Owner Match Model)
+- Date: 2026-11-13 (Superseded: 2026-11-14)
+
+> [!NOTE]
+> This decision has been superseded by [ADR-0008: Single-Owner Match Model](0008-single-owner-match-model.md). Match access roles (`MatchUserRole`), the `match_access` table, and multi-user delegation have been eliminated in favor of a direct single-owner model (`matches.owner_id`).
 
 ## Situation
 Match ownership was previously tracked in two parallel locations:

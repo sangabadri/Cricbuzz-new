@@ -63,6 +63,7 @@ CODE_TO_DOC_MAPPINGS = [
         "docs": (
             "docs/decisions/0005-no-auth.md",
             "docs/decisions/0007-match-access-single-source-of-truth.md",
+            "docs/decisions/0008-single-owner-match-model.md",
         ),
         "description": "Public spectator access, session tokens, and match access permissions",
     },

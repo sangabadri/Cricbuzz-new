@@ -16,8 +16,8 @@ The auth and match access implementation introduced architectural boundary viola
 ### C. [RESOLVED - 2026-11-13] Fail-Open Security Vulnerability in Parameter Parsing (Correctness / Security)
 - Resolved: `require_match_access` now fails closed, raising `HTTPException(400)` if match path parameter is missing or non-integer.
 
-### D. [RESOLVED - 2026-11-13] Dual Source of Truth & Cascade Privilege Drop (Extensibility / Correctness)
-- Resolved per ADR 0007: Removed `created_by` column from `Match` model completely, keeping `Match` pure cricket domain data. Canonical ownership resides solely in `match_access` with `role = MatchUserRole.OWNER`.
+### D. [RESOLVED - 2026-11-14] Dual Source of Truth & Match Access Roles Removed (ADR-0008)
+- Resolved per ADR 0008: Superseded ADR-0007. Retired `match_access` table, match access roles (`MatchUserRole`), and delegation endpoints. Canonical match ownership is represented directly via `matches.owner_id` (foreign key to `users.id`, nullable for unassigned demo/test fixture backward compatibility). A match belongs strictly to one person, with authorization enforced via `require_match_owner`.
 
 ### E. [RESOLVED - 2026-11-13] Semantic Misappropriation of `CricketDomainError` for Auth (Consistency / HTTP Contract)
 - Resolved in Slice D: Introduced `InvalidCredentialsError`, `InactiveUserError`, `EntityConflictError`, and `TokenExpiredOrInvalidError` in `domain/exceptions.py`. Updated `main.py`'s global handler to map 401 with `WWW-Authenticate: Bearer` header, 403, and 409 Conflict.

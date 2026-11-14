@@ -13,9 +13,10 @@ class MatchRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def create(self, match_in: MatchCreate) -> Match:
+    async def create(self, match_in: MatchCreate, owner_id: int | None = None) -> Match:
         """Inserts a new match into the database."""
         match = Match(
+            owner_id=owner_id,
             team_a=match_in.team_a,
             team_b=match_in.team_b,
             venue=match_in.venue,

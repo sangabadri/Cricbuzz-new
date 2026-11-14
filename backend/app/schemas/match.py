@@ -26,6 +26,7 @@ class MatchMOM(BaseModel):
 class MatchResponse(MatchCreate):
     """Schema for returning match details."""
     id: int
+    owner_id: int | None = None
     status: MatchStatus
     team_a_name: str | None = None
     team_b_name: str | None = None

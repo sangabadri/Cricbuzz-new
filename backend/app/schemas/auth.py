@@ -1,6 +1,5 @@
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
-from app.domain.enums import MatchUserRole
 
 
 class UserRegister(BaseModel):
@@ -35,18 +34,3 @@ class TokenResponse(BaseModel):
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str | None = None
-
-
-class MatchAccessGrant(BaseModel):
-    username: str
-    role: MatchUserRole = MatchUserRole.SCORER
-
-
-class MatchAccessResponse(BaseModel):
-    user_id: int
-    username: str
-    role: MatchUserRole
-    granted_by: int | None = None
-    created_at: datetime | None = None
-
-    model_config = ConfigDict(from_attributes=True)

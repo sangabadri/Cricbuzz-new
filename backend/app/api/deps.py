@@ -2,15 +2,14 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 import jwt
+from typing import Any
 from app.config import settings
 from app.database import get_db
-from app.domain.enums import MatchUserRole
 from app.domain.exceptions import AccessDeniedError, AuthenticationRequiredError, EntityNotFoundError
 from app.models.user import User
 from app.repositories.delivery import DeliveryRepository
 from app.repositories.innings import InningsRepository
 from app.repositories.match import MatchRepository
-from app.repositories.match_access import MatchAccessRepository
 from app.repositories.player import PlayerRepository
 from app.repositories.squad import SquadRepository
 from app.repositories.team import TeamRepository
@@ -21,7 +20,6 @@ from app.services.delivery import DeliveryService
 from app.services.demo_seed import DemoSeedService
 from app.services.innings import InningsService
 from app.services.match import MatchService
-from app.services.match_access import MatchAccessService
 from app.services.player import PlayerService
 from app.services.scorecard import ScorecardService
 from app.services.security import decode_token
@@ -66,10 +64,6 @@ async def get_refresh_token_repo(session: AsyncSession = Depends(get_db)) -> Ref
     return RefreshTokenRepository(session)
 
 
-async def get_match_access_repo(session: AsyncSession = Depends(get_db)) -> MatchAccessRepository:
-    return MatchAccessRepository(session)
-
-
 async def get_team_service(
     team_repo: TeamRepository = Depends(get_team_repo),
 ) -> TeamService:
@@ -87,9 +81,8 @@ async def get_match_service(
     team_repo: TeamRepository = Depends(get_team_repo),
     squad_repo: SquadRepository = Depends(get_squad_repo),
     innings_repo: InningsRepository = Depends(get_innings_repo),
-    match_access_repo: MatchAccessRepository = Depends(get_match_access_repo),
 ) -> MatchService:
-    return MatchService(match_repo, team_repo, squad_repo, innings_repo, match_access_repo)
+    return MatchService(match_repo, team_repo, squad_repo, innings_repo)
 
 
 async def get_squad_service(
@@ -145,14 +138,6 @@ async def get_auth_service(
     return AuthService(user_repo, refresh_token_repo)
 
 
-async def get_match_access_service(
-    match_access_repo: MatchAccessRepository = Depends(get_match_access_repo),
-    match_repo: MatchRepository = Depends(get_match_repo),
-    user_repo: UserRepository = Depends(get_user_repo),
-) -> MatchAccessService:
-    return MatchAccessService(match_access_repo, match_repo, user_repo)
-
-
 async def get_current_user_optional(
     token: str | None = Depends(oauth2_scheme),
     user_repo: UserRepository = Depends(get_user_repo),
@@ -185,57 +170,63 @@ async def get_current_user(
     return current_user
 
 
-def require_match_access(allowed_roles: list[MatchUserRole] | None = None):
+async def require_match_owner(
+    request: Request,
+    match_repo: MatchRepository = Depends(get_match_repo),
+    current_user: User | None = Depends(get_current_user_optional),
+) -> User | None:
     """
-    Dependency factory to check whether the current user is authorized to perform operations on a match.
-    Enforces authorization via MatchAccessService.authorize_match_access.
+    Authorization guard for single-owner match operations.
+    Enforces that only the designated match owner (or superuser) may score/mutate a match.
+    Unassigned matches (owner_id is None) allow open access for backward demo/test compatibility.
     """
-    if allowed_roles is None:
-        allowed_roles = [MatchUserRole.OWNER, MatchUserRole.SCORER]
+    match_id_str = request.path_params.get("match_id") or request.path_params.get("id")
+    if not match_id_str:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing match ID parameter in request path",
+        )
 
-    async def _guard(
-        request: Request,
-        match_access_service: MatchAccessService = Depends(get_match_access_service),
-        current_user: User | None = Depends(get_current_user_optional),
-    ) -> User | None:
-        match_id_str = request.path_params.get("match_id") or request.path_params.get("id")
-        if not match_id_str:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Missing match ID parameter in request path",
-            )
+    try:
+        match_id = int(match_id_str)
+        if match_id <= 0:
+            raise ValueError()
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid match ID parameter in request path",
+        )
 
-        try:
-            match_id = int(match_id_str)
-            if match_id <= 0:
-                raise ValueError()
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid match ID parameter in request path",
-            )
+    match = await match_repo.get_by_id(match_id)
+    if not match:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Match with ID {match_id} not found",
+        )
 
-        try:
-            return await match_access_service.authorize_match_access(
-                match_id=match_id,
-                user=current_user,
-                allowed_roles=allowed_roles,
-            )
-        except AuthenticationRequiredError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=exc.message,
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        except AccessDeniedError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=exc.message,
-            )
-        except EntityNotFoundError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=exc.message,
-            )
+    # Legacy / unassigned match compatibility:
+    # If no owner is assigned, permit open access (historical fixtures & tests)
+    if match.owner_id is None:
+        return current_user
 
-    return _guard
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required for this match",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if getattr(current_user, "is_superuser", False) or current_user.id == match.owner_id:
+        return current_user
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="You do not have permission to modify this match",
+    )
+
+
+def require_match_access(allowed_roles: Any = None):
+    """
+    Backwards-compatible factory alias for require_match_owner under the Single-Owner Match model.
+    """
+    return require_match_owner

@@ -126,18 +126,18 @@ async def test_match_access_authorization_guard_e2e(test_client: AsgiTestClient)
         },
     )
     token_a = reg_a.json()["access_token"]
+    user_a_id = reg_a.json()["user"]["id"]
 
-    # Register Scorer User
+    # Register Non-Owner User
     reg_b = await test_client.post(
         "/api/v1/auth/register",
         json={
-            "username": "guest_scorer",
-            "email": "guest@cricket.org",
+            "username": "other_user",
+            "email": "other@cricket.org",
             "password": "Password123!",
         },
     )
     token_b = reg_b.json()["access_token"]
-    user_b_id = reg_b.json()["user"]["id"]
 
     # Create Teams
     t1 = (await test_client.post("/api/v1/teams/", json={"name": "Team Alpha"})).json()
@@ -156,60 +156,45 @@ async def test_match_access_authorization_guard_e2e(test_client: AsgiTestClient)
         headers={"Authorization": f"Bearer {token_a}"},
     )
     assert match_resp.status_code == 201
-    match_id = match_resp.json()["id"]
+    match_data = match_resp.json()
+    match_id = match_data["id"]
+    assert match_data["owner_id"] == user_a_id
 
-    # Public Spectator can view match details
+    # Public Spectator can view match details unauthenticated (ADR-0005)
     view_resp = await test_client.get(f"/api/v1/matches/{match_id}")
     assert view_resp.status_code == 200
 
-    # Guest Scorer tries to conduct toss without permission -> 403 Forbidden
+    # Non-owner user tries to conduct toss on owner's match -> 403 Forbidden
     unauthorized_toss = await test_client.post(
         f"/api/v1/matches/{match_id}/toss",
         json={"toss_winner": t1["id"], "toss_decision": "bat"},
         headers={"Authorization": f"Bearer {token_b}"},
     )
     assert unauthorized_toss.status_code == 403
+    assert "You do not have permission to modify this match" in unauthorized_toss.json()["detail"]
 
-    # Owner delegates scorer access to Guest Scorer
-    grant_resp = await test_client.post(
-        f"/api/v1/matches/{match_id}/access",
-        json={"username": "guest_scorer", "role": "scorer"},
-        headers={"Authorization": f"Bearer {token_a}"},
-    )
-    assert grant_resp.status_code == 201
-    assert grant_resp.json()["username"] == "guest_scorer"
-    assert grant_resp.json()["role"] == "scorer"
-
-    # Guest Scorer checks access list
-    access_list = await test_client.get(
-        f"/api/v1/matches/{match_id}/access",
-        headers={"Authorization": f"Bearer {token_b}"},
-    )
-    assert access_list.status_code == 200
-    assert len(access_list.json()) >= 1
-
-    # Guest Scorer tries to grant access to someone else -> 403 (only owner can grant)
-    guest_grant_attempt = await test_client.post(
-        f"/api/v1/matches/{match_id}/access",
-        json={"username": "match_owner", "role": "scorer"},
-        headers={"Authorization": f"Bearer {token_b}"},
-    )
-    assert guest_grant_attempt.status_code == 403
-
-    # Owner revokes Guest Scorer's access
-    revoke_resp = await test_client.delete(
-        f"/api/v1/matches/{match_id}/access/{user_b_id}",
-        headers={"Authorization": f"Bearer {token_a}"},
-    )
-    assert revoke_resp.status_code == 204
-
-    # Guest Scorer now receives 403 again
-    revoked_attempt = await test_client.post(
+    # Unauthenticated attempt to conduct toss on owner's match -> 401 Unauthorized
+    unauthenticated_toss = await test_client.post(
         f"/api/v1/matches/{match_id}/toss",
         json={"toss_winner": t1["id"], "toss_decision": "bat"},
-        headers={"Authorization": f"Bearer {token_b}"},
     )
-    assert revoked_attempt.status_code == 403
+    assert unauthenticated_toss.status_code == 401
+    assert "Bearer" in unauthenticated_toss.headers.get("www-authenticate", "")
+
+    # Match Owner can mutate match (e.g. abandon match) successfully -> 200 OK
+    owner_abandon = await test_client.post(
+        f"/api/v1/matches/{match_id}/abandon",
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    assert owner_abandon.status_code == 200
+    assert owner_abandon.json()["status"] == "abandoned"
+
+    # Access sharing endpoints are eliminated (/access -> 404 Not Found)
+    access_attempt = await test_client.get(
+        f"/api/v1/matches/{match_id}/access",
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    assert access_attempt.status_code in (404, 405)
 
     # Fail-closed parameter checks: non-integer or <= 0 match IDs return 400
     invalid_param_resp = await test_client.post(

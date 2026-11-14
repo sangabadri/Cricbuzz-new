@@ -22,7 +22,7 @@ async def test_match_creation_and_toss_flow():
     squad_repo = AsyncMock()
 
     team_repo.get_by_id.side_effect = lambda tid: Team(id=tid, name=f"Team {tid}")
-    match_repo.create.side_effect = lambda m_in: Match(
+    match_repo.create.side_effect = lambda m_in, *args, **kwargs: Match(
         id=1,
         team_a=m_in.team_a,
         team_b=m_in.team_b,

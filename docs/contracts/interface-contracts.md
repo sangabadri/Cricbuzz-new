@@ -48,16 +48,15 @@ This document defines the interface contracts between the Frontend and Backend, 
 | `POST` | `/api/v1/players/` | Authenticated | `PlayerCreate` | `PlayerResponse` (201) |
 | `GET` | `/api/v1/players/{id}` | Public | None | `PlayerResponse` |
 
-### B. Matches & Match Access
+### B. Matches & Ownership (ADR-0008)
 | Method | Endpoint | Role Required | Description |
 |---|---|---|---|
 | `GET` | `/api/v1/matches/` | Public | List matches (filter `?status=live`). |
-| `POST` | `/api/v1/matches/` | Authenticated | Create match (`MatchCreate`). Creator assigned `owner` role in `match_access`. |
+| `POST` | `/api/v1/matches/` | Authenticated | Create match (`MatchCreate`). Creator assigned directly as `matches.owner_id`. |
 | `GET` | `/api/v1/matches/{match_id}` | Public | Get full match details. |
-| `POST` | `/api/v1/matches/{match_id}/toss` | Scorer / Owner | Record toss result (`TossRecord`). |
-| `GET` | `/api/v1/matches/{match_id}/access` | Owner | List all users with granted access. |
-| `POST` | `/api/v1/matches/{match_id}/access` | Owner | Grant role (`scorer`, `viewer`) to user. |
-| `DELETE` | `/api/v1/matches/{match_id}/access/{user_id}` | Owner | Revoke user access. |
+| `POST` | `/api/v1/matches/{match_id}/toss` | Match Owner | Record toss result (`TossRecord`). |
+| `POST` | `/api/v1/matches/{match_id}/abandon` | Match Owner | Abandon match. |
+| `POST` | `/api/v1/matches/{match_id}/mom` | Match Owner | Award Player of the Match. |
 
 ### C. Squads & Innings
 | Method | Endpoint | Role Required | Description |
@@ -86,19 +85,19 @@ This document defines the interface contracts between the Frontend and Backend, 
 
 ## 4. Role Authorization Matrix
 
-| Action / Endpoint | Public (Unauth) | Viewer | Scorer | Owner | Superuser |
-|---|---|---|---|---|---|
-| View match list & status | ALLOW | ALLOW | ALLOW | ALLOW | ALLOW |
-| View live match center & scorecards | ALLOW | ALLOW | ALLOW | ALLOW | ALLOW |
-| View commentary & squads | ALLOW | ALLOW | ALLOW | ALLOW | ALLOW |
-| Create new team / player / match | DENY (401) | ALLOW | ALLOW | ALLOW | ALLOW |
-| Record toss | DENY (401) | DENY (403) | ALLOW | ALLOW | ALLOW |
-| Submit playing squad | DENY (401) | DENY (403) | ALLOW | ALLOW | ALLOW |
-| Start innings / record deliveries | DENY (401) | DENY (403) | ALLOW | ALLOW | ALLOW |
-| Undo / correct delivery | DENY (401) | DENY (403) | ALLOW | ALLOW | ALLOW |
-| Manage match access (grant/revoke) | DENY (401) | DENY (403) | DENY (403) | ALLOW | ALLOW |
+| Action / Endpoint | Public (Unauth) | Non-Owner User | Match Owner | Superuser |
+|---|---|---|---|---|
+| View match list & status | ALLOW | ALLOW | ALLOW | ALLOW |
+| View live match center & scorecards | ALLOW | ALLOW | ALLOW | ALLOW |
+| View commentary & squads | ALLOW | ALLOW | ALLOW | ALLOW |
+| Create new team / player / match | DENY (401) | ALLOW | ALLOW | ALLOW |
+| Record toss | DENY (401) | DENY (403) | ALLOW | ALLOW |
+| Submit playing squad | DENY (401) | DENY (403) | ALLOW | ALLOW |
+| Start innings / record deliveries | DENY (401) | DENY (403) | ALLOW | ALLOW |
+| Undo / correct delivery | DENY (401) | DENY (403) | ALLOW | ALLOW |
+| Abandon / Award MoM | DENY (401) | DENY (403) | ALLOW | ALLOW |
 
-*Note on Unassigned Matches*: A match with no rows in `match_access` is treated as open/unassigned, allowing scoring without authentication for testing and demo seed compatibility (ADR-0007).
+*Note on Unassigned Matches*: A match where `owner_id is None` is treated as open/unassigned, allowing scoring without authentication for testing and demo seed compatibility (ADR-0008).
 
 ---
 

@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, Query, status
-from app.api.deps import get_current_user_optional, get_match_service, require_match_access
-from app.domain.enums import MatchUserRole
+from app.api.deps import get_current_user_optional, get_match_service, require_match_owner
 from app.models.match import Match
 from app.models.user import User
 from app.schemas.enums import MatchStatus
@@ -58,7 +57,7 @@ async def list_matches(
     "/{match_id}/toss",
     response_model=MatchResponse,
     summary="Conduct match toss",
-    dependencies=[Depends(require_match_access([MatchUserRole.OWNER, MatchUserRole.SCORER]))],
+    dependencies=[Depends(require_match_owner)],
 )
 async def conduct_toss(
     match_id: int,
@@ -72,7 +71,7 @@ async def conduct_toss(
     "/{match_id}/abandon",
     response_model=MatchResponse,
     summary="Abandon a match",
-    dependencies=[Depends(require_match_access([MatchUserRole.OWNER]))],
+    dependencies=[Depends(require_match_owner)],
 )
 async def abandon_match(
     match_id: int,
@@ -85,7 +84,7 @@ async def abandon_match(
     "/{match_id}/mom",
     response_model=MatchResponse,
     summary="Award Man of the Match",
-    dependencies=[Depends(require_match_access([MatchUserRole.OWNER, MatchUserRole.SCORER]))],
+    dependencies=[Depends(require_match_owner)],
 )
 async def award_mom(
     match_id: int,

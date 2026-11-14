@@ -79,9 +79,3 @@ class ExtraType(str, Enum):
     BYE = "bye"
     LEGBYE = "leg-bye"
 
-
-class MatchUserRole(str, Enum):
-    OWNER = "owner"
-    SCORER = "scorer"
-    VIEWER = "viewer"
-

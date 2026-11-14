@@ -23,7 +23,7 @@ Always follow this read order based on the scope of your task:
 
 - **Public Spectator Access**: Public spectator match viewing, live status, and scorecards must ALWAYS remain completely unauthenticated (ADR-0005).
 - **Domain Purity**: `backend/app/domain/` contains pure cricket rules and must NEVER import FastAPI, SQLAlchemy, or Pydantic (ADR-0001, enforced by automated tests).
-- **Single Source of Auth Truth**: Match ownership and scorer access reside solely in the `match_access` table with `role = MatchUserRole.OWNER` or `SCORER` (ADR-0007).
+- **Single-Owner Match Model**: A match belongs to exactly one user via direct `matches.owner_id`. There are no shared match roles or delegation (ADR-0008). Only the match owner (or superuser) can mutate a protected match; unassigned matches (`owner_id is None`) permit open demo access.
 - **Scoring Lock Order**: All methods that mutate match or innings state lock rows in the exact order: **match first, then innings** (`for_update=True`, ADR-0003).
 - **No Client-Side Cricket Rules**: The frontend never calculates scores, overs, strike rotation, or wickets. The backend decides; the frontend displays (ADR-0006).
 - **Pre-Flight and Post-Flight Quality Gates**: All backend tests (185) and frontend checks (lint, 131 tests, build) must pass before and after your change.

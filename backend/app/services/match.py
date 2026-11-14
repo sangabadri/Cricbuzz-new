@@ -1,9 +1,7 @@
-from app.domain.enums import MatchUserRole
 from app.domain.exceptions import EntityNotFoundError, RuleViolationError
 from app.models.match import Match
 from app.repositories.innings import InningsRepository
 from app.repositories.match import MatchRepository
-from app.repositories.match_access import MatchAccessRepository
 from app.repositories.squad import SquadRepository
 from app.repositories.team import TeamRepository
 from app.schemas.enums import MatchStatus, TossDecision
@@ -23,13 +21,11 @@ class MatchService:
         team_repo: TeamRepository,
         squad_repo: SquadRepository | None = None,
         innings_repo: InningsRepository | None = None,
-        match_access_repo: MatchAccessRepository | None = None,
     ):
         self.match_repo = match_repo
         self.team_repo = team_repo
         self.squad_repo = squad_repo
         self.innings_repo = innings_repo
-        self.match_access_repo = match_access_repo
 
     async def _enrich_team_names(self, matches: list[Match]) -> None:
         """Helper to populate team_a_name and team_b_name on match objects."""
@@ -70,9 +66,7 @@ class MatchService:
         if not team_b:
             raise EntityNotFoundError(f"Team with ID {match_in.team_b} does not exist")
 
-        match = await self.match_repo.create(match_in)
-        if creator_id is not None and self.match_access_repo:
-            await self.match_access_repo.grant_access(match.id, creator_id, MatchUserRole.OWNER)
+        match = await self.match_repo.create(match_in, owner_id=creator_id)
         if team_a and hasattr(team_a, "name") and isinstance(team_a.name, str):
             setattr(match, "team_a_name", team_a.name)
         if team_b and hasattr(team_b, "name") and isinstance(team_b.name, str):

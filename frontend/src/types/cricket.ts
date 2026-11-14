@@ -39,6 +39,7 @@ export interface Player {
 
 export interface Match {
   id: number;
+  owner_id?: number | null;
   team_a: number;
   team_b: number;
   team_a_name?: string;

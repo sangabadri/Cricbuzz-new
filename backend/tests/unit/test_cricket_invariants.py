@@ -9,23 +9,23 @@ import pytest
 from unittest.mock import AsyncMock
 from datetime import datetime, timezone
 from app.domain.crease import CreaseState
-from app.domain.enums import ExtraType, InningsStatus, MatchFormat, MatchStatus, MatchUserRole, WicketType
+from app.domain.enums import ExtraType, InningsStatus, MatchFormat, MatchStatus, WicketType
 from app.domain.exceptions import CreaseViolationError, EntityNotFoundError, OverProgressionError, RuleViolationError
 from app.domain.innings_aggregate import InningsAggregate
 from app.domain.rules.formats import get_format_rules
 from app.models.delivery import Delivery
 from app.models.innings import Innings
 from app.models.match import Match
-from app.models.match_access import MatchAccess
 from app.models.player import Player
 from app.models.team import Team
 from app.models.user import User
 from app.schemas.delivery import DeliveryCreate
 from app.schemas.innings import InningsCreate
+from app.schemas.match import MatchCreate
 from app.schemas.scorecard import LiveMatchResponse
 from app.services.delivery import DeliveryService
 from app.services.innings import InningsService
-from app.services.match_access import MatchAccessService
+from app.services.match import MatchService
 from app.services.scorecard import ScorecardService
 from tests.conftest import sync
 
@@ -152,36 +152,37 @@ async def test_create_innings_rejected_on_completed_match_and_exceeding_format_l
 
 
 @sync
-async def test_demoting_sole_match_owner_rejected():
+async def test_single_owner_match_creation_preserves_owner():
     """
-    grant_match_access rejects demoting the sole owner of the match.
+    MatchService.create_match sets owner_id to creator_id.
     """
-    match_access_repo = AsyncMock()
     match_repo = AsyncMock()
-    user_repo = AsyncMock()
+    team_repo = AsyncMock()
+    team_repo.get_by_id.side_effect = lambda tid: Team(id=tid, name=f"Team_{tid}")
 
-    match = Match(id=1, team_a=1, team_b=2, status=MatchStatus.SCHEDULED)
-    match_repo.get_by_id.return_value = match
+    created_match = Match(
+        id=1,
+        team_a=1,
+        team_b=2,
+        venue="Wankhede",
+        format=MatchFormat.T20,
+        status=MatchStatus.SCHEDULED,
+        owner_id=42,
+    )
+    match_repo.create.return_value = created_match
 
-    owner_user = User(id=42, username="owner_bob", is_active=True)
-    user_repo.get_by_username.return_value = owner_user
+    service = MatchService(match_repo, team_repo)
+    match_in = MatchCreate(
+        team_a=1,
+        team_b=2,
+        venue="Wankhede",
+        format=MatchFormat.T20,
+        match_date=datetime.now(timezone.utc),
+    )
+    result = await service.create_match(match_in, creator_id=42)
 
-    # Bob is currently an OWNER and the only grant on the match
-    match_access_repo.get_user_match_role.return_value = MatchUserRole.OWNER
-    match_access_repo.list_for_match.return_value = [
-        (MatchAccess(id=1, match_id=1, user_id=42, role=MatchUserRole.OWNER), "owner_bob")
-    ]
-
-    service = MatchAccessService(match_access_repo, match_repo, user_repo)
-
-    # Demoting the sole owner must raise RuleViolationError
-    with pytest.raises(RuleViolationError, match="Cannot demote the sole owner of the match"):
-        await service.grant_match_access(
-            match_id=1,
-            target_username="owner_bob",
-            role=MatchUserRole.SCORER,
-            granted_by_id=42,
-        )
+    assert result.owner_id == 42
+    match_repo.create.assert_called_once_with(match_in, owner_id=42)
 
 
 @sync

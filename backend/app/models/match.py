@@ -7,6 +7,7 @@ class Match(Base):
     __tablename__ = "matches"
     
     id = Column(Integer, primary_key=True)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     team_a = Column(Integer, ForeignKey("teams.id"), nullable=False)
     team_b = Column(Integer, ForeignKey("teams.id"), nullable=False)
     venue = Column(String, nullable=False)
