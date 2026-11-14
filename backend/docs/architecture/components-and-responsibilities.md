@@ -56,7 +56,7 @@ This document defines the exact responsibilities, boundaries, and import constra
   - `SquadService` constructs strongly-typed `SquadResponse` projections with resolved player identities without model attribute mutation (`setattr`).
   - `DemoSeedService` isolates procedural match, squad, toss, and innings generation from HTTP routers.
   - `MatchEventBus` (`app/services/event_bus.py`) provides a multi-pod Pub/Sub broker with Redis Pub/Sub fan-out across replicas (`cricbuzz:match:{id}`), self-echo suppression, and zero-latency local `asyncio.Queue` fallback for real-time Server-Sent Events (SSE). Broadcasts match state events (`delivery_recorded`, `delivery_patched`, `delivery_undone`, `bowler_changed`, `batter_changed`, `strike_swapped`).
-  - `ScorecardCache` (`app/services/scorecard_cache.py`) provides a two-tiered (L1 in-memory bounded LRU, L2 Redis key-value) Cache-Aside pattern for immutable completed and abandoned matches (24h TTL), with active invalidation on match or delivery mutations.
+  - `ScorecardCache` (`app/services/scorecard_cache.py`) provides a two-tiered (L1 in-memory bounded LRU of 500 items with 30s consistency TTL, L2 Redis key-value with 24h TTL) Cache-Aside pattern for completed and abandoned matches, with active asynchronous invalidation across replicas on match or delivery mutations.
   - `redis_client.py` (`app/services/redis_client.py`) provides singleton async connection pooling (`redis.asyncio`), health check probes (`is_redis_healthy`), and graceful shutdown hooks.
 - Raises pure domain exceptions on invariant violations.
 

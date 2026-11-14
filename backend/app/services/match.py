@@ -7,6 +7,8 @@ from app.repositories.team import TeamRepository
 from app.schemas.enums import MatchStatus, TossDecision
 from app.schemas.innings import InningsCreate
 from app.schemas.match import MatchCreate, MatchMOM, MatchToss
+from app.services.event_bus import match_event_bus, MatchEventBus
+from app.services.scorecard_cache import scorecard_cache, ScorecardCache
 
 
 class MatchService:
@@ -21,11 +23,15 @@ class MatchService:
         team_repo: TeamRepository,
         squad_repo: SquadRepository | None = None,
         innings_repo: InningsRepository | None = None,
+        event_bus: MatchEventBus | None = None,
+        cache: ScorecardCache | None = None,
     ):
         self.match_repo = match_repo
         self.team_repo = team_repo
         self.squad_repo = squad_repo
         self.innings_repo = innings_repo
+        self.event_bus = event_bus or match_event_bus
+        self.cache = cache or scorecard_cache
 
     async def _enrich_team_names(self, matches: list[Match]) -> None:
         """Helper to populate team_a_name and team_b_name on match objects."""
@@ -151,6 +157,13 @@ class MatchService:
                     ),
                 )
 
+        if self.event_bus:
+            self.event_bus.publish(
+                match_id=match_id,
+                event="match_updated",
+                data={"match_id": match_id, "status": "toss_done"},
+            )
+
         return saved_match
 
     async def abandon_match(self, match_id: int) -> Match:
@@ -162,7 +175,16 @@ class MatchService:
         if match.status == MatchStatus.COMPLETED:
             raise RuleViolationError("Cannot abandon an already completed match")
         match.status = MatchStatus.ABANDONED
-        return await self.match_repo.save(match)
+        saved_match = await self.match_repo.save(match)
+        if self.cache:
+            await self.cache.invalidate_async(match_id)
+        if self.event_bus:
+            self.event_bus.publish(
+                match_id=match_id,
+                event="match_updated",
+                data={"match_id": match_id, "status": "abandoned"},
+            )
+        return saved_match
 
     async def set_man_of_the_match(self, match_id: int, mom_in: MatchMOM) -> Match:
         """Awards Man of the Match to a player and locks match permanently."""
@@ -173,7 +195,16 @@ class MatchService:
         if match.status != MatchStatus.COMPLETED:
             raise RuleViolationError("Man of the Match can only be awarded after the match has completed")
         match.mom = mom_in.player_id
-        return await self.match_repo.save(match)
+        saved_match = await self.match_repo.save(match)
+        if self.cache:
+            await self.cache.invalidate_async(match_id)
+        if self.event_bus:
+            self.event_bus.publish(
+                match_id=match_id,
+                event="match_updated",
+                data={"match_id": match_id, "mom_id": mom_in.player_id},
+            )
+        return saved_match
 
 
 

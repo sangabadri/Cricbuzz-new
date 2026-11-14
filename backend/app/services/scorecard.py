@@ -1,3 +1,4 @@
+from app.domain.enums import MatchStatus
 from app.domain.exceptions import EntityNotFoundError
 from app.domain.innings_aggregate import InningsAggregate
 from app.domain.rules.formats import get_format_rules
@@ -11,6 +12,7 @@ from app.repositories.match import MatchRepository
 from app.repositories.player import PlayerRepository
 from app.repositories.team import TeamRepository
 from app.schemas.enums import ExtraType, InningsStatus, WicketType
+from app.services.scorecard_cache import ScorecardCache, scorecard_cache
 from app.schemas.scorecard import (
     BatterScorecard,
     BowlerScorecard,
@@ -52,15 +54,25 @@ class ScorecardService:
         delivery_repo: DeliveryRepository,
         player_repo: PlayerRepository,
         team_repo: TeamRepository,
+        cache: ScorecardCache | None = None,
     ):
         self.match_repo = match_repo
         self.innings_repo = innings_repo
         self.delivery_repo = delivery_repo
         self.player_repo = player_repo
         self.team_repo = team_repo
+        self.cache = cache if cache is not None else scorecard_cache
 
     async def get_innings_scorecard(self, match_id: int, innings_number: int) -> InningsScorecard:
         """Computes and returns the complete scorecard for a single innings."""
+        # Cache-Aside hit check for completed matches
+        if self.cache:
+            cached_match = await self.cache.get_async(match_id)
+            if cached_match:
+                for inn in cached_match.innings:
+                    if inn.innings_number == innings_number:
+                        return inn
+
         innings = await self.innings_repo.get_by_match_and_number(match_id, innings_number)
         if not innings:
             raise EntityNotFoundError(f"Innings {innings_number} for Match {match_id} not found")
@@ -84,6 +96,12 @@ class ScorecardService:
 
     async def get_match_scorecard(self, match_id: int) -> MatchScorecardResponse:
         """Computes and returns the complete scorecard for the entire match."""
+        # Cache-Aside fast-path: return cached scorecard on cache hit
+        if self.cache:
+            cached = await self.cache.get_async(match_id)
+            if cached is not None:
+                return cached
+
         match = await self.match_repo.get_by_id(match_id)
         if not match:
             raise EntityNotFoundError(f"Match with ID {match_id} not found")
@@ -121,7 +139,7 @@ class ScorecardService:
             )
             innings_scorecards.append(inn_card)
 
-        return MatchScorecardResponse(
+        scorecard = MatchScorecardResponse(
             match_id=match.id,
             format=match.format,
             status=match.status,
@@ -140,6 +158,17 @@ class ScorecardService:
             mom_name=mom.name if mom else None,
             innings=innings_scorecards,
         )
+
+        # Cache-Aside populate: Cache immutable completed and abandoned matches
+        if self.cache and match.status in (
+            MatchStatus.COMPLETED,
+            MatchStatus.ABANDONED,
+            "completed",
+            "abandoned",
+        ):
+            await self.cache.set_async(match_id, scorecard)
+
+        return scorecard
 
     async def get_live_match_state(self, match_id: int) -> LiveMatchResponse:
         """Computes the live match ticker snapshot."""
