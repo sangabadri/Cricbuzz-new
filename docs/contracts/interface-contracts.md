@@ -69,17 +69,26 @@ This document defines the interface contracts between the Frontend and Backend, 
 ### D. Deliveries & Live Scoring
 | Method | Endpoint | Role Required | Description |
 |---|---|---|---|
-| `POST` | `/api/v1/deliveries/{match_id}/{innings_number}` | Scorer / Owner | Record delivery (`DeliveryCreate` with optional `new_batter_id`). Returns `ScorerStateResponse`. |
-| `DELETE` | `/api/v1/deliveries/{match_id}/{innings_number}/last` | Scorer / Owner | Undo last delivery. Returns reverted `ScorerStateResponse`. |
-| `PATCH` | `/api/v1/deliveries/{match_id}/{innings_number}/last` | Scorer / Owner | Correct last delivery (`DeliveryUpdate`). Returns updated `ScorerStateResponse`. |
-| `GET` | `/api/v1/deliveries/{match_id}/{innings_number}/scorer-state` | Public | Get active scorer state (crease, overs, recent balls). |
+| `POST` | `/api/v1/matches/{match_id}/innings/{innings_number}/deliveries` | Scorer / Owner | Record delivery (`DeliveryCreate`). Supports optional `Idempotency-Key` header to safely retry mutations without duplicate deliveries. Returns `LiveScorerStateResponse`. |
+| `DELETE` | `/api/v1/matches/{match_id}/innings/{innings_number}/deliveries/last` | Scorer / Owner | Undo last delivery. Returns reverted `DeliveryResponse`. |
+| `PATCH` | `/api/v1/matches/{match_id}/innings/{innings_number}/deliveries/last` | Scorer / Owner | Correct last delivery (`ManualDeliveryUpdate`). Returns updated `DeliveryResponse`. |
+| `GET` | `/api/v1/matches/{match_id}/innings/{innings_number}/scorer-state` | Public | Get active scorer state (crease, overs, recent balls). |
 
-### E. Scorecards & Match Center
+### E. Scorecards & Real-Time Push Stream
 | Method | Endpoint | Role Required | Description |
 |---|---|---|---|
-| `GET` | `/api/v1/scorecards/{match_id}` | Public | Full match scorecard (both innings, batting, bowling, extras). |
-| `GET` | `/api/v1/scorecards/{match_id}/live` | Public | Live summary snapshot (scores, run rates, active batters/bowler). |
-| `POST` | `/api/v1/seed/demo` | Public / Dev | Resets & seeds full demo match (India vs Australia T20). |
+| `GET` | `/api/v1/matches/{match_id}/scorecard` | Public | Full match scorecard (cached via Cache-Aside for completed/abandoned matches). |
+| `GET` | `/api/v1/matches/{match_id}/live` | Public | Live summary snapshot (scores, run rates, active batters/bowler). |
+| `GET` | `/api/v1/matches/{match_id}/innings/{innings_number}/scorecard` | Public | Single innings scorecard. |
+| `GET` | `/api/v1/matches/{match_id}/live-stream` | Public | W3C Server-Sent Events (SSE) push stream for live spectators (`text/event-stream`). Emits `delivery_recorded`, `delivery_patched`, `delivery_undone`, `match_updated`, and heartbeat pings. |
+| `POST` | `/api/v1/seed/demo-match` | Public / Dev | Resets & seeds full demo match (India vs Australia T20). |
+
+### F. Health Probes & Observability
+| Method | Endpoint | Auth Required | Description |
+|---|---|---|---|
+| `GET` | `/health` | Public | Legacy health check alias. Returns `200 OK`. |
+| `GET` | `/health/live` | Public | Shallow process liveness probe. Returns `200 OK` without database access. |
+| `GET` | `/health/ready` | Public | Deep readiness probe. Pings database with `SELECT 1` (2.0s timeout). Returns `200 OK` or `503 Service Unavailable`. |
 
 ---
 
@@ -113,4 +122,28 @@ This document defines the interface contracts between the Frontend and Backend, 
 | **404 Not Found** | Entity not found | `EntityNotFoundError` |
 | **409 Conflict** | Resource conflict (e.g. username taken) | `EntityConflictError` |
 | **422 Unprocessable** | Request schema or parameter validation failure | Pydantic validation errors |
+| **429 Too Many Requests** | Distributed rate limit exceeded | `DistributedRateLimitMiddleware` (includes dynamic `Retry-After`, `X-RateLimit-*`) |
 | **500 Internal Error**| Unexpected server exception | Database connection failure, unhandled crash |
+
+---
+
+## 6. Distributed Rate Limiting Specification
+
+The API implements distributed rate limiting using Redis atomic counters with automatic fail-open fallback:
+
+### A. Tiers & Thresholds
+| Tier | Methods & Endpoints | Limit | Window | Exceeded Response |
+|---|---|---|---|---|
+| **Public Spectator** | `GET` on `/api/v1/matches/*`, `/live-stream`, `/scorecard` | 60 req/min per IP | 60s | `429 Too Many Requests` |
+| **Authentication** | `POST` on `/api/v1/auth/login`, `/api/v1/auth/register` | 10 req/min per IP | 60s | `429 Too Many Requests` |
+| **Scorer & Mutations**| `POST`, `PUT`, `PATCH`, `DELETE` or `Authorization: Bearer` | Exempt from spectator quota | N/A | Never blocked by spectator NAT traffic |
+| **Infra & Docs** | `/health/*`, `/docs`, `/openapi.json`, `/redoc` | Unlimited | N/A | Never throttled |
+
+### B. Headers
+- `X-RateLimit-Limit`: Maximum requests permitted within the 60-second window.
+- `X-RateLimit-Remaining`: Remaining request quota for the current window.
+- `Retry-After`: Dynamic number of seconds remaining until the rate limit quota resets (sent on `429`).
+
+### C. Anti-Spoofing & Fail-Open Policy
+- **Anti-Spoofing**: `X-Forwarded-For` is only honored if the direct socket connection originates from a trusted reverse proxy (`settings.TRUSTED_PROXIES`), preventing arbitrary clients from bypassing limits or performing denial-of-service on victim IPs.
+- **Fail-Open Policy**: If Redis is unconfigured or unreachable, rate limiting fails open without rejecting requests, ensuring zero disruption to spectators and live matches.

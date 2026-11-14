@@ -21,8 +21,8 @@ This document details how data flows through the React application, how server s
 [ API Gateway (lib/api-client.ts) ]
                ^
                | 1. cricketApi.getScorecard(matchId)
-[ Custom Hook (useMatchScorecard.ts) ]
-               ^
+[ Custom Hook (useMatchCenterQueries.ts) ] <==== [ Server-Sent Events (SSE) /live-stream ]
+               ^                                   (push invalidates liveTicker, scorecard, deliveries)
                | 2. queryKey: ['scorecard', matchId]
 [ Page Component (MatchDetailPage.tsx) ]
                |
@@ -31,19 +31,8 @@ This document details how data flows through the React application, how server s
 [ Presentation Component (BattingTable.tsx) ]
 ```
 
-### A. Reading Data (`useQuery`)
-```typescript
-export function useMatchScorecard(matchId: number) {
-  return useQuery({
-    queryKey: ['scorecard', matchId],
-    queryFn: () => cricketApi.getScorecard(matchId),
-    refetchInterval: (query) => {
-      // Poll every 3 seconds if match is live; disable polling if completed
-      return query.state.data?.status === 'live' ? 3000 : false;
-    },
-  });
-}
-```
+### A. Reading Data (`useQuery` + SSE Push Invalidation)
+`useMatchCenterQueries` subscribes to the Server-Sent Events stream (`GET /matches/{id}/live-stream`) via browser native `EventSource`. When live events (`delivery_recorded`, `delivery_patched`, `delivery_undone`, `match_updated`) arrive, `queryClient.invalidateQueries(...)` is immediately triggered, pushing real-time score updates to the screen without aggressive 3-second database polling. A 30-second fallback refetch interval remains active as a safety sync in case the SSE connection disconnects.
 
 ### B. Mutating Data (`useMutation`)
 ```typescript
